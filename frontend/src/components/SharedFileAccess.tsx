@@ -53,13 +53,20 @@ const SharedFileAccess: React.FC = () => {
         return;
       }
       
+      console.log('Verifying share with ID:', shareId);
+      console.log('API_BASE_URL:', API_BASE_URL);
+      
       try {
-        const response = await axios.get(`${API_BASE_URL}/shares/verify/${shareId}`);
+        const url = `${API_BASE_URL}/shares/verify/${shareId}`;
+        console.log('Fetching from URL:', url);
+        const response = await axios.get(url);
+        console.log('Share verification response:', response.data);
         setShareInfo(response.data);
         setActiveStep(1); // Move to OTP step if share exists
         setLoading(false);
       } catch (error: any) {
         console.error('Error verifying share:', error);
+        console.error('Error details:', error.response?.data);
         setError(error.response?.data?.message || 'This share link is invalid or has expired');
         setLoading(false);
       }
@@ -180,11 +187,19 @@ const SharedFileAccess: React.FC = () => {
         return (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             {loading ? (
-              <CircularProgress />
+              <>
+                <CircularProgress sx={{ mb: 2 }} />
+                <Typography>Verifying share link...</Typography>
+              </>
             ) : error ? (
-              <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+              <>
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+                <Typography variant="body2" color="text.secondary">
+                  Please check the link and try again.
+                </Typography>
+              </>
             ) : (
-              <Typography>Verifying share link...</Typography>
+              <Typography>Loading...</Typography>
             )}
           </Box>
         );
