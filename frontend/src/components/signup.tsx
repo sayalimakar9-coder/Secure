@@ -109,16 +109,26 @@ export default function SignUp() {
         setLoading(true);
 
         // Make API call directly from component
-        await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/auth/register`, {
-          username,
-          email,
-          phone: phoneNumber,
-          password,
-        });
+        const response = await axios.post(
+          "https://secure-file-backend-98yd.onrender.com/api/auth/register", {
+            username,
+            email,
+            phone: phoneNumber,
+            password,
+          });
 
         setLoading(false);
-        // Navigate to OTP verification page with email and password in state
-        navigate('/verify-otp', { state: { email, password } });
+        
+        // Navigate to OTP verification page - even if email failed, show manual OTP option
+        navigate('/verify-otp', { 
+          state: { 
+            email, 
+            password,
+            emailSent: response.data.emailSent,
+            manualOtp: response.data.manualOtp,
+            emailError: response.data.emailError
+          } 
+        });
       } catch (error: any) {
         setLoading(false);
         setApiError(error.response?.data?.message || 'An error occurred during signup');

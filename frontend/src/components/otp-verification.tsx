@@ -271,6 +271,23 @@ export default function OtpVerification() {
             {location.state?.email ? ` ${location.state.email}` : ' your email'}
           </Typography>
           
+          {location.state?.emailSent === false && (
+            <Box sx={{ 
+              p: 2, 
+              mb: 2, 
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffc107',
+              borderRadius: 1,
+              textAlign: 'center'
+            }}>
+              <Typography variant="body2" sx={{ color: '#856404' }}>
+                {location.state?.emailError || 'Email could not be sent.'}
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#856404', fontWeight: 600, mt: 1 }}>
+                Manual OTP: <span style={{ fontSize: '18px', letterSpacing: '3px' }}>{location.state?.manualOtp}</span>
+              </Typography>
+            </Box>
+          )}
           <FormControl>
             <FormLabel htmlFor="otp-input" sx={{ mb: 1 }}>Enter verification code</FormLabel>
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
