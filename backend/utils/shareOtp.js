@@ -16,8 +16,8 @@ module.exports = async (email, otp, fileInfo, shareLink) => {
   const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
-      user: process.env.EMAIL_USER || 'your-gmail@gmail.com',
-      pass: process.env.EMAIL_PASS || 'your-app-password', 
+      user: (process.env.EMAIL_USER || 'your-gmail@gmail.com').trim(),
+      pass: (process.env.EMAIL_PASS || 'your-app-password').trim().replace(/\s/g, ''), // Remove all spaces
     },
     tls: {
       rejectUnauthorized: false, // Allow self-signed certificates if needed
@@ -64,12 +64,17 @@ module.exports = async (email, otp, fileInfo, shareLink) => {
     console.log('Share OTP email sent successfully');
     return { success: true, info };
   } catch (error) {
-    console.error('Error sending share OTP email:', error);
+    console.error('Error sending share OTP email:');
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error response:', error.response);
+    console.error('Full error:', error);
     // Return error details instead of throwing
     return { 
       success: false, 
       error: error.message,
-      code: error.code || 'UNKNOWN'
+      code: error.code || 'UNKNOWN',
+      details: error.response || 'Check server logs for details'
     };
   }
 };
