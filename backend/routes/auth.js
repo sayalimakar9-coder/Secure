@@ -16,7 +16,7 @@ const generateOTP = () => {
 // @access  Public
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, phone } = req.body;
     
     // Validate inputs
     if (!username || !email || !password) {
@@ -33,6 +33,7 @@ router.post('/register', async (req, res) => {
     user = new User({
       username,
       email,
+      phone,
       password,
       isVerified: false
     });

@@ -7,14 +7,19 @@ const nodemailer = require('nodemailer');
  * @returns {Promise} - Result of sending the email
  */
 module.exports = async (email, otp) => {
+  // Check if email credentials are configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    throw new Error('Email service is not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.');
+  }
+
   const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
-      user: process.env.EMAIL_USER || 'your-gmail@gmail.com',
-      pass: process.env.EMAIL_PASS || 'your-app-password',
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
     tls: {
-      rejectUnauthorized: false, // Allow self-signed certificates if needed
+      rejectUnauthorized: false,
     },
   });
 
