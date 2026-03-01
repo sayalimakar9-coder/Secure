@@ -27,6 +27,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Snackbar from '@mui/material/Snackbar';
 import { useAuth } from '../context/AuthContext'; // Add this import
+import { API_BASE_URL } from '../config/api';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -105,13 +106,13 @@ export default function Home() {
       const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
       
       const [filesResponse, sharesResponse, userResponse] = await Promise.all([
-        axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/files`, {
+        axios.get(`${API_BASE_URL}/files`, {
           headers: { 'x-auth-token': token }
         }),
-        axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/shares`, {
+        axios.get(`${API_BASE_URL}/shares`, {
           headers: { 'x-auth-token': token }
         }),
-        axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/auth/profile`, {
+        axios.get(`${API_BASE_URL}/auth/profile`, {
           headers: { 'x-auth-token': token }
         })
       ]);
@@ -186,7 +187,7 @@ export default function Home() {
     try {
       const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
       
-      await axios.delete(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/files/${fileToDelete._id}`, {
+      await axios.delete(`${API_BASE_URL}/files/${fileToDelete._id}`, {
         headers: { 'x-auth-token': token }
       });
       
@@ -223,7 +224,7 @@ export default function Home() {
     try {
       const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
       
-      await axios.delete(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/shares/${shareToRevoke._id}`, {
+      await axios.delete(`${API_BASE_URL}/shares/${shareToRevoke._id}`, {
         headers: { 'x-auth-token': token }
       });
       
@@ -388,7 +389,7 @@ export default function Home() {
                                     if (token) {
                                       // Use axios with proper headers instead of a direct link
                                       const response = await axios({
-                                        url: `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/files/download/${file._id || file.id}`,
+                                        url: `${API_BASE_URL}/files/download/${file._id || file.id}`,
                                         method: 'GET',
                                         responseType: 'blob',
                                         headers: {

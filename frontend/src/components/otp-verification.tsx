@@ -10,6 +10,7 @@ import { styled } from '@mui/material/styles';
 import ThemeWrapper from './ThemeWrapper';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -171,7 +172,7 @@ export default function OtpVerification() {
     
     try {
       // Resend OTP by calling signup endpoint again
-      await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/auth/signup`, {
+      await axios.post(`${API_BASE_URL}/auth/signup`, {
         email,
         // We need to send these fields but they'll be ignored for existing users
         username: 'resend',
@@ -207,7 +208,7 @@ export default function OtpVerification() {
       setLoading(true);
       
       // Make API call to verify OTP
-      await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/auth/verify`, {
+      await axios.post(`${API_BASE_URL}/auth/verify`, {
         email,
         otp: otpString
       });
@@ -216,7 +217,7 @@ export default function OtpVerification() {
       if (password) {
         try {
           // Make login API call
-          const loginResponse = await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/auth/login`, {
+          const loginResponse = await axios.post(`${API_BASE_URL}/auth/login`, {
             email,
             password
           });

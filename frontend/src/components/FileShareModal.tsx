@@ -26,6 +26,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
 interface FileShareModalProps {
   open: boolean;
@@ -94,7 +95,7 @@ const FileShareModal: React.FC<FileShareModalProps> = ({ open, onClose, file }) 
       }
       
       const response = await axios.post(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/shares`,
+        `${API_BASE_URL}/shares`,
         {
           fileId: file._id || file.id,
           recipientEmail,

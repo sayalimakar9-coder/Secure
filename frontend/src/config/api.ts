@@ -11,9 +11,8 @@ const getApiBaseUrl = (): string => {
     return 'http://localhost:5000/api';
   }
   
-  // Production: use deployed backend URL (replace with your actual Render backend URL)
-  // Example: https://your-backend-app.onrender.com/api
-  return 'https://your-backend-app.onrender.com/api';
+  // Production: use deployed backend URL 
+  return 'https://secure-file-backend-98yd.onrender.com/api';
 };
 
 export const API_BASE_URL = getApiBaseUrl();

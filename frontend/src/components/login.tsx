@@ -16,6 +16,7 @@ import { styled } from '@mui/material/styles';
 import { GoogleIcon, FacebookIcon } from './customicon';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext'; // Import the auth context
+import { API_BASE_URL } from '../config/api';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -94,7 +95,7 @@ export default function Login() {
       try {
         setLoading(true);
         
-        const response = await axios.post(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/auth/login`, {
+        const response = await axios.post(`${API_BASE_URL}/auth/login`, {
           email,
           password
         });

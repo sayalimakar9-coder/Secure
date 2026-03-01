@@ -24,6 +24,7 @@ import EmailIcon from '@mui/icons-material/Email';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DescriptionIcon from '@mui/icons-material/Description';
 import ThemeWrapper from './ThemeWrapper';
+import { API_BASE_URL } from '../config/api';
 import axios from 'axios';
 
 // Steps for the file access process
@@ -53,7 +54,7 @@ const SharedFileAccess: React.FC = () => {
       }
       
       try {
-        const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/shares/verify/${shareId}`);
+        const response = await axios.get(`${API_BASE_URL}/shares/verify/${shareId}`);
         setShareInfo(response.data);
         setActiveStep(1); // Move to OTP step if share exists
         setLoading(false);
@@ -95,7 +96,7 @@ const SharedFileAccess: React.FC = () => {
       }
       
       const response = await axios.post(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/shares/access/${shareId}`,
+        `${API_BASE_URL}/shares/access/${shareId}`,
         data
       );
       
@@ -122,7 +123,7 @@ const SharedFileAccess: React.FC = () => {
       setLoading(true);
       
       // Create download URL
-      const downloadUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/shares/download/${shareId}`;
+      const downloadUrl = `${API_BASE_URL}/shares/download/${shareId}`;
       
       console.log('Starting download with access token:', accessToken);
       console.log('File info:', JSON.stringify(fileInfo, null, 2));

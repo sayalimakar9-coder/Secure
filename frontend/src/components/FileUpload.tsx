@@ -14,6 +14,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CloseIcon from '@mui/icons-material/Close';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import axios from 'axios';
+import { API_BASE_URL } from '../config/api';
 
 interface FileUploadProps {
   onUploadComplete: (data: any) => void;
@@ -77,7 +78,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onUploadComplete }) => {
       }
 
       const response = await axios.post(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/files/upload`,
+        `${API_BASE_URL}/files/upload`,
         formData,
         {
           headers: {
