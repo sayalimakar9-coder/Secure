@@ -154,35 +154,62 @@ router.get('/verify/:shareId', async (req, res) => {
   try {
     const { shareId } = req.params;
     
+    console.log('📋 Share verification request for:', shareId);
+    
+    if (!shareId || shareId.length === 0) {
+      console.error('❌ Invalid shareId provided');
+      return res.status(400).json({ message: 'Invalid share ID' });
+    }
+    
     // Find the share
     const share = await Share.findOne({ shareId })
       .populate('file', 'originalName size');
     
+    console.log('🔍 Share found:', share ? 'YES' : 'NO');
+    
     if (!share) {
+      console.error('❌ Share not found for ID:', shareId);
       return res.status(404).json({ message: 'Share not found' });
     }
     
+    if (!share.file) {
+      console.error('❌ File associated with share not found');
+      return res.status(404).json({ message: 'Associated file not found' });
+    }
+    
     // Check if share is expired
-    if (new Date() > share.expiresAt) {
+    const now = new Date();
+    console.log('⏰ Checking expiration - Now:', now, 'Expires:', share.expiresAt);
+    
+    if (now > share.expiresAt) {
+      console.warn('⏰ Share has expired');
       return res.status(400).json({ message: 'This share link has expired' });
     }
     
     // Check if share is revoked
     if (share.isRevoked) {
+      console.warn('🚫 Share has been revoked');
       return res.status(400).json({ message: 'This share has been revoked' });
     }
     
     // Return basic info about the share
-    res.json({
+    const responseData = {
       fileName: share.file.originalName,
       fileSize: share.file.size,
       isPasswordProtected: share.isPasswordProtected,
       expiresAt: share.expiresAt,
       emailDelivered: share.emailDelivered // Include email delivery status
-    });
+    };
+    
+    console.log('✅ Share verification successful');
+    console.log('📦 Response:', JSON.stringify(responseData, null, 2));
+    
+    res.json(responseData);
   } catch (error) {
-    console.error('Error verifying share:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ Error verifying share:');
+    console.error('Error message:', error.message);
+    console.error('Full error:', error);
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 
@@ -194,39 +221,57 @@ router.post('/access/:shareId', async (req, res) => {
     const { shareId } = req.params;
     const { otp, password } = req.body;
     
+    console.log('🔑 Access request for share:', shareId);
+    console.log('📝 OTP provided:', otp ? otp.length + ' digits' : 'NONE');
+    console.log('🔐 Password provided:', password ? 'YES' : 'NO');
+    
     // Find the share with complete file information
     const share = await Share.findOne({ shareId })
       .populate('file', 'originalName size mimetype path encryptionKey encryptionIV storedName');
     
     if (!share) {
+      console.error('❌ Share not found:', shareId);
       return res.status(404).json({ message: 'Share not found' });
     }
     
+    console.log('✓ Share found');
+    
     // Check if share is expired
-    if (new Date() > share.expiresAt) {
+    const now = new Date();
+    if (now > share.expiresAt) {
+      console.warn('⏰ Share expired at:', share.expiresAt);
       return res.status(400).json({ message: 'This share link has expired' });
     }
     
     // Check if share is revoked
     if (share.isRevoked) {
+      console.warn('🚫 Share is revoked');
       return res.status(400).json({ message: 'This share has been revoked' });
     }
     
     // Verify OTP
+    console.log('🔍 Verifying OTP - Expected:', share.otp, 'Provided:', otp);
     if (share.otp !== otp) {
+      console.warn('❌ OTP mismatch');
       return res.status(400).json({ message: 'Invalid OTP' });
     }
+    
+    console.log('✅ OTP verified');
     
     // Verify password if required
     if (share.isPasswordProtected) {
       if (!password) {
+        console.warn('❌ Password required but not provided');
         return res.status(400).json({ message: 'Password is required' });
       }
       
       const isPasswordValid = await bcrypt.compare(password, share.password);
       if (!isPasswordValid) {
+        console.warn('❌ Password invalid');
         return res.status(400).json({ message: 'Invalid password' });
       }
+      
+      console.log('✅ Password verified');
     }
     
     // Generate access token
@@ -236,6 +281,8 @@ router.post('/access/:shareId', async (req, res) => {
       { expiresIn: '1h' }
     );
     
+    console.log('🎫 Access token generated');
+    
     // Update share record
     share.isOtpVerified = true;
     share.accessToken = accessToken;
@@ -243,8 +290,10 @@ router.post('/access/:shareId', async (req, res) => {
     share.lastAccessed = new Date();
     await share.save();
     
+    console.log('💾 Share record updated');
+    
     // Return access token and file info
-    res.json({
+    const responseData = {
       accessToken,
       file: {
         id: share.file._id,
@@ -257,10 +306,22 @@ router.post('/access/:shareId', async (req, res) => {
         storedName: share.file.storedName
       },
       permission: share.permission
-    });
+    };
+    
+    console.log('✅ Access granted successfully');
+    console.log('📦 Response:', JSON.stringify({ 
+      accessToken: accessToken.substring(0, 20) + '...', 
+      permission: responseData.permission,
+      fileName: responseData.file.originalName
+    }, null, 2));
+    
+    res.json(responseData);
   } catch (error) {
-    console.error('Error accessing shared file:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ Error accessing shared file:');
+    console.error('Error message:', error.message);
+    console.error('Full error:', error);
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
   }
 });
 

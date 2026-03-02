@@ -49,32 +49,58 @@ const SharedFileAccess: React.FC = () => {
   useEffect(() => {
     const verifyShare = async () => {
       if (!shareId) {
+        console.error('❌ No shareId found in URL');
         setError('Invalid share link');
         setLoading(false);
         return;
       }
       
-      console.log('Verifying share with ID:', shareId);
-      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('🔍 Verifying share with ID:', shareId);
+      console.log('📍 API_BASE_URL:', API_BASE_URL);
       
       try {
         const url = `${API_BASE_URL}/shares/verify/${shareId}`;
-        console.log('Fetching from URL:', url);
-        const response = await axios.get(url);
-        console.log('Share verification response:', response.data);
+        console.log('🌐 Fetching from URL:', url);
+        
+        const response = await axios.get(url, {
+          timeout: 10000 // 10 second timeout
+        });
+        
+        console.log('✅ Share verification successful');
+        console.log('📦 Response data:', response.data);
+        
+        if (!response.data) {
+          throw new Error('Empty response from server');
+        }
+        
         setShareInfo(response.data);
         
         // If manual OTP is provided (email failed), store it
         if (response.data.manualOtp) {
+          console.log('⚠️ Manual OTP provided:', response.data.manualOtp);
           setManualOtp(response.data.manualOtp);
         }
         
         setActiveStep(1); // Move to OTP step if share exists
         setLoading(false);
       } catch (error: any) {
-        console.error('Error verifying share:', error);
-        console.error('Error details:', error.response?.data);
-        setError(error.response?.data?.message || 'This share link is invalid or has expired');
+        console.error('❌ Error verifying share');
+        console.error('Error message:', error.message);
+        console.error('Error status:', error.response?.status);
+        console.error('Error data:', error.response?.data);
+        
+        if (error.code === 'ECONNABORTED') {
+          setError('Connection timeout - please check your internet and try again');
+        } else if (error.response?.status === 404) {
+          setError('This share link does not exist or has been deleted');
+        } else if (error.response?.status === 400) {
+          setError(error.response?.data?.message || 'This share link has expired');
+        } else if (!error.response) {
+          setError('Cannot connect to server - please check your internet connection');
+        } else {
+          setError(error.response?.data?.message || 'This share link is invalid or has expired');
+        }
+        
         setLoading(false);
       }
     };
@@ -93,7 +119,10 @@ const SharedFileAccess: React.FC = () => {
   };
   
   const handleVerifyOtp = async () => {
+    console.log('🔐 OTP Verification - Length:', otp.length);
+    
     if (otp.length !== 6) {
+      console.warn('⚠️ Invalid OTP length:', otp.length);
       setError('Please enter a valid 6-digit OTP');
       return;
     }
@@ -107,12 +136,17 @@ const SharedFileAccess: React.FC = () => {
       
       if (shareInfo.isPasswordProtected && password) {
         data.password = password;
+        console.log('🔐 Password included in request');
       }
       
-      const response = await axios.post(
-        `${API_BASE_URL}/shares/access/${shareId}`,
-        data
-      );
+      const url = `${API_BASE_URL}/shares/access/${shareId}`;
+      console.log('🌐 Sending OTP verification to:', url);
+      console.log('📤 Request data:', { otp: '****', hasPassword: !!data.password });
+      
+      const response = await axios.post(url, data);
+      
+      console.log('✅ OTP verification successful');
+      console.log('📦 Response:', response.data);
       
       setAccessToken(response.data.accessToken);
       setFileInfo(response.data.file);
@@ -123,7 +157,11 @@ const SharedFileAccess: React.FC = () => {
       setActiveStep(2); // Move to file access step
       setError('');
     } catch (error: any) {
-      console.error('OTP verification error:', error);
+      console.error('❌ OTP verification failed');
+      console.error('Error status:', error.response?.status);
+      console.error('Error message:', error.response?.data?.message);
+      console.error('Full error:', error.message);
+      
       setError(error.response?.data?.message || 'Invalid OTP or password');
     } finally {
       setLoading(false);
@@ -131,7 +169,10 @@ const SharedFileAccess: React.FC = () => {
   };
   
   const handleDownloadFile = async () => {
-    if (!fileInfo || !accessToken) return;
+    if (!fileInfo || !accessToken) {
+      console.error('❌ Missing file info or access token');
+      return;
+    }
     
     try {
       setLoading(true);
@@ -139,8 +180,10 @@ const SharedFileAccess: React.FC = () => {
       // Create download URL
       const downloadUrl = `${API_BASE_URL}/shares/download/${shareId}`;
       
-      console.log('Starting download with access token:', accessToken);
-      console.log('File info:', JSON.stringify(fileInfo, null, 2));
+      console.log('📥 Download request starting...');
+      console.log('URL:', downloadUrl);
+      console.log('File:', fileInfo.originalName);
+      console.log('Size:', fileInfo.size);
       
       // Use axios to get the file with proper headers
       const response = await axios({
@@ -149,10 +192,12 @@ const SharedFileAccess: React.FC = () => {
         responseType: 'blob',
         headers: {
           'x-access-token': accessToken
-        }
+        },
+        timeout: 30000
       });
       
-      console.log('Download response received:', response.status);
+      console.log('✅ File downloaded successfully');
+      console.log('Response size:', response.data.size);
       
       // Create a blob URL and trigger download
       const blob = new Blob([response.data]);
@@ -163,6 +208,7 @@ const SharedFileAccess: React.FC = () => {
       link.href = url;
       link.download = fileInfo.originalName || 'downloaded-file';
       document.body.appendChild(link);
+      console.log('📥 Triggering download for:', link.download);
       link.click();
       
       // Clean up
@@ -172,8 +218,11 @@ const SharedFileAccess: React.FC = () => {
       }, 100);
       
     } catch (error: any) {
-      console.error('Download error:', error);
-      console.error('Error details:', error.response?.status, error.response?.data);
+      console.error('❌ Download error:');
+      console.error('Status:', error.response?.status);
+      console.error('Message:', error.response?.data?.message);
+      console.error('Full error:', error.message);
+      
       setError(error.response?.data?.message || 'Failed to download file. Please try again.');
     } finally {
       setLoading(false);
