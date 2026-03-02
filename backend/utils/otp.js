@@ -17,14 +17,13 @@ module.exports = async (email, otp) => {
   console.log('To:', email);
 
   const transporter = nodemailer.createTransport({
-    service: 'gmail', 
+    host: 'smtp.gmail.com',
+    port: 465,  // Use SSL port instead of TLS
+    secure: true,
     auth: {
       user: emailUser,
       pass: emailPass,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
+    }
   });
 
   const mailOptions = {

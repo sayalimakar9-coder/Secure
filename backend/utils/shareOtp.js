@@ -19,16 +19,15 @@ module.exports = async (email, otp, fileInfo, shareLink) => {
   console.log('To:', email);
   console.log('Service: Gmail');
 
-  // Create a transporter using Gmail
+  // Create a transporter using Gmail with explicit SMTP settings
   const transporter = nodemailer.createTransport({
-    service: 'gmail', 
+    host: 'smtp.gmail.com',
+    port: 465,  // Use SSL port instead of TLS
+    secure: true,
     auth: {
       user: emailUser,
       pass: emailPass,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
+    }
   });
 
   const mailOptions = {
