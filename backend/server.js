@@ -1,6 +1,17 @@
 // Load environment variables from .env file
 require('dotenv').config();
 
+// DEBUG: Log environment variables on startup
+console.log('\n=== ENVIRONMENT VARIABLES CHECK ===');
+console.log('EMAIL_USER:', process.env.EMAIL_USER ? `✓ Set (${process.env.EMAIL_USER})` : '❌ Missing');
+console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? '✓ Set' : '❌ Missing');
+if (process.env.EMAIL_PASS) {
+  console.log('EMAIL_PASS length:', process.env.EMAIL_PASS.length);
+  console.log('EMAIL_PASS value:', process.env.EMAIL_PASS);
+}
+console.log('MONGO_URI:', process.env.MONGO_URI ? '✓ Set' : '❌ Missing');
+console.log('=== END ENVIRONMENT CHECK ===\n');
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
