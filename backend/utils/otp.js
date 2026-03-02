@@ -9,14 +9,25 @@ const nodemailer = require('nodemailer');
 module.exports = async (email, otp) => {
   // Check if email credentials are configured
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.error('❌ Email configuration missing!');
+    console.error('EMAIL_USER:', process.env.EMAIL_USER ? '✓ Set' : '❌ Missing');
+    console.error('EMAIL_PASS:', process.env.EMAIL_PASS ? '✓ Set' : '❌ Missing');
     throw new Error('Email service is not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.');
   }
+
+  // Prepare credentials (remove spaces from app password)
+  const emailUser = process.env.EMAIL_USER.trim();
+  const emailPass = process.env.EMAIL_PASS.trim().replace(/\s/g, '');
+
+  console.log('📧 Attempting to send OTP verification email...');
+  console.log('From:', emailUser);
+  console.log('To:', email);
 
   const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: emailUser,
+      pass: emailPass,
     },
     tls: {
       rejectUnauthorized: false,
@@ -24,7 +35,7 @@ module.exports = async (email, otp) => {
   });
 
   const mailOptions = {
-    from: process.env.EMAIL_USER || 'your-gmail@gmail.com',
+    from: emailUser,
     to: email,
     subject: 'Verify Your Account',
     text: `Your verification code is: ${otp}. This code will expire in 10 minutes.`,
@@ -48,11 +59,25 @@ module.exports = async (email, otp) => {
   };
 
   try {
+    console.log('🔄 Sending OTP via Gmail...');
     const info = await transporter.sendMail(mailOptions);
-    console.log('OTP email sent successfully');
+    console.log('✅ OTP email sent successfully!');
+    console.log('Message ID:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending OTP email:', error);
+    console.error('❌ Error sending OTP email:');
+    console.error('Error Message:', error.message);
+    console.error('Error Code:', error.code);
+    
+    // Provide specific error guidance
+    if (error.code === 'EAUTH') {
+      console.error('⚠️  AUTHENTICATION FAILED - Check your EMAIL_USER and EMAIL_PASS');
+      console.error('Make sure you are using a Gmail App Password, not your regular password');
+      console.error('https://myaccount.google.com/apppasswords');
+    } else if (error.message.includes('Invalid login')) {
+      console.error('⚠️  INVALID CREDENTIALS - Gmail rejected the login attempt');
+    }
+    
     throw error;
   }
 };

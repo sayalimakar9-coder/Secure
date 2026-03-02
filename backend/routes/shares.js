@@ -87,14 +87,18 @@ router.post('/', auth, async (req, res) => {
     // Send OTP email to recipient - but continue even if email fails
     let emailResult;
     try {
+      console.log('Attempting to send email to:', recipientEmail);
+      console.log('Share link:', shareLink);
       emailResult = await sendShareOtp(recipientEmail, otp, {
         fileName: file.originalName,
         ownerName: owner.username || owner.email,
         fileSize: file.size
       }, shareLink);
+      console.log('Email result:', emailResult);
     } catch (emailError) {
       // Log error but don't fail the share creation
       console.error('Error in email sending attempt:', emailError);
+      console.error('Email error details:', emailError.message || 'Unknown email error');
       emailResult = { 
         success: false, 
         error: emailError.message || 'Unknown email error'
@@ -106,7 +110,7 @@ router.post('/', auth, async (req, res) => {
     await share.save();
     
     // Return response with share information and email status
-    res.json({
+    const responseData = {
       message: emailResult && emailResult.success 
         ? 'File shared successfully and notification sent' 
         : 'File shared successfully but email notification failed',
@@ -116,7 +120,10 @@ router.post('/', auth, async (req, res) => {
       emailDelivered: share.emailDelivered,
       emailError: emailResult && !emailResult.success ? emailResult.error : null,
       otp: emailResult && !emailResult.success ? otp : undefined // Include OTP in response if email failed
-    });
+    };
+    
+    console.log('Share creation response:', responseData);
+    res.json(responseData);
   } catch (error) {
     console.error('Error creating share:', error);
     res.status(500).json({ message: 'Server error' });

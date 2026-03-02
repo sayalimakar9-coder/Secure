@@ -9,23 +9,37 @@ const nodemailer = require('nodemailer');
  * @returns {Promise} - Result of sending the email
  */
 module.exports = async (email, otp, fileInfo, shareLink) => {
+  // Validate environment variables
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.error('❌ Email configuration missing!');
+    console.error('EMAIL_USER:', process.env.EMAIL_USER ? '✓ Set' : '❌ Missing');
+    console.error('EMAIL_PASS:', process.env.EMAIL_PASS ? '✓ Set' : '❌ Missing');
+    throw new Error('Email service is not configured. Please set EMAIL_USER and EMAIL_PASS environment variables.');
+  }
+
+  // Prepare credentials (remove spaces from app password)
+  const emailUser = process.env.EMAIL_USER.trim();
+  const emailPass = process.env.EMAIL_PASS.trim().replace(/\s/g, '');
+  
+  console.log('📧 Attempting to send email...');
+  console.log('From:', emailUser);
+  console.log('To:', email);
+  console.log('Service: Gmail');
+
   // Create a transporter using Gmail
-  // NOTE: For Gmail to work properly, you need to:
-  // 1. Use an App Password instead of your regular password: https://myaccount.google.com/apppasswords
-  // 2. Make sure 2-Step Verification is enabled on your Google account
   const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
-      user: (process.env.EMAIL_USER || 'your-gmail@gmail.com').trim(),
-      pass: (process.env.EMAIL_PASS || 'your-app-password').trim().replace(/\s/g, ''), // Remove all spaces
+      user: emailUser,
+      pass: emailPass,
     },
     tls: {
-      rejectUnauthorized: false, // Allow self-signed certificates if needed
+      rejectUnauthorized: false,
     },
   });
 
   const mailOptions = {
-    from: process.env.EMAIL_USER || 'your-gmail@gmail.com',
+    from: emailUser,
     to: email,
     subject: 'File Shared With You - Access Verification',
     text: `A file has been shared with you. Your verification code is: ${otp}. Use this code to access the file.`,
@@ -60,21 +74,31 @@ module.exports = async (email, otp, fileInfo, shareLink) => {
   };
 
   try {
+    console.log('🔄 Sending email via Gmail...');
     const info = await transporter.sendMail(mailOptions);
-    console.log('Share OTP email sent successfully');
+    console.log('✅ Email sent successfully!');
+    console.log('Message ID:', info.messageId);
     return { success: true, info };
   } catch (error) {
-    console.error('Error sending share OTP email:');
-    console.error('Error message:', error.message);
-    console.error('Error code:', error.code);
-    console.error('Error response:', error.response);
-    console.error('Full error:', error);
+    console.error('❌ Error sending email:');
+    console.error('Error Message:', error.message);
+    console.error('Error Code:', error.code);
+    
+    // Provide specific error guidance
+    if (error.code === 'EAUTH') {
+      console.error('⚠️  AUTHENTICATION FAILED - Check your EMAIL_USER and EMAIL_PASS');
+      console.error('Make sure you are using a Gmail App Password, not your regular password');
+      console.error('https://myaccount.google.com/apppasswords');
+    } else if (error.message.includes('Invalid login')) {
+      console.error('⚠️  INVALID CREDENTIALS - Gmail rejected the login attempt');
+    }
+    
     // Return error details instead of throwing
     return { 
       success: false, 
       error: error.message,
       code: error.code || 'UNKNOWN',
-      details: error.response || 'Check server logs for details'
+      details: 'Check backend logs for detailed error information'
     };
   }
 };
