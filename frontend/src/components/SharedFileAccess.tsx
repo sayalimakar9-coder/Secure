@@ -44,10 +44,9 @@ const SharedFileAccess: React.FC = () => {
   const [permissionLevel, setPermissionLevel] = useState('');
   const [manualOtp, setManualOtp] = useState(''); // For displaying OTP when email fails
   
-  // Initialize by verifying the share exists
-  // Build cache fresh start
+  // Initialize by verifying the share exists - fresh build trigger
   useEffect(() => {
-    console.log('SharedFileAccess component mounted, verifying share:', shareId);
+    console.log('SharedFileAccess: Verifying share access', shareId);
     const verifyShare = async () => {
       if (!shareId) {
         console.error('❌ No shareId found in URL');
