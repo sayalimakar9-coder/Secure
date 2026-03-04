@@ -19,6 +19,17 @@ const shareRoutes = require('./routes/shares');
 
 const app = express();
 
+// Configure CORS to allow requests from the frontend
+app.use(cors({
+  origin: [
+    'https://secure-file-sharing-app-tor7-4o7rptkj4.vercel.app',
+    'http://localhost:3000',  // For local development
+    'http://localhost:5000'   // For local testing
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.use(express.json());
 
