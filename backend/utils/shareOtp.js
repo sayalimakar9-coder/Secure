@@ -1,7 +1,7 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 /**
- * Send share OTP email to recipient using Nodemailer (Gmail)
+ * Send share OTP email to recipient using Resend (HTTP API - works on Render)
  * @param {string} email - Recipient email
  * @param {string} otp - One-time password
  * @param {Object} fileInfo - Information about the shared file
@@ -9,39 +9,32 @@ const nodemailer = require('nodemailer');
  * @returns {Promise} - Result of sending the email
  */
 module.exports = async (email, otp, fileInfo, shareLink) => {
-  const emailUser = process.env.EMAIL_USER;
-  const emailPass = process.env.EMAIL_PASS;
+  const resendApiKey = process.env.RESEND_API_KEY;
 
-  if (!emailUser || !emailPass) {
-    console.error('❌ Email credentials not configured!');
-    console.error('Please set EMAIL_USER and EMAIL_PASS environment variables');
+  if (!resendApiKey) {
+    console.error('❌ Resend API key not configured!');
+    console.error('Please set RESEND_API_KEY environment variable');
     return {
       success: false,
-      error: 'Email credentials not configured',
-      details: 'Set EMAIL_USER and EMAIL_PASS in Environment Variables'
+      error: 'Resend API key not configured',
+      details: 'Set RESEND_API_KEY in Environment Variables'
     };
   }
 
-  // Create Nodemailer transporter with Gmail
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: emailUser,
-      pass: emailPass,
-    },
-  });
+  const resend = new Resend(resendApiKey);
+  // Use Resend's default sender (works without domain verification)
+  const fromEmail = 'onboarding@resend.dev';
 
-  console.log('📧 Attempting to send share OTP email via Gmail...');
-  console.log('From:', emailUser);
+  console.log('📧 Attempting to send share OTP email via Resend...');
+  console.log('From:', fromEmail);
   console.log('To:', email);
   console.log('Share link:', shareLink);
 
   try {
-    const mailOptions = {
-      from: `"Secure File Sharing" <${emailUser}>`,
-      to: email,
+    const data = await resend.emails.send({
+      from: fromEmail,
+      to: [email],
       subject: 'File Shared With You - Access Verification',
-      text: `A file has been shared with you. Your verification code is: ${otp}. Use this code to access the file at: ${shareLink}`,
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.5; font-size: 16px; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
           <h2 style="color: #3f51b5; margin-bottom: 20px; text-align: center;">Secure File Share</h2>
@@ -55,7 +48,7 @@ module.exports = async (email, otp, fileInfo, shareLink) => {
           
           <p>To access this file, you'll need to verify with the following code:</p>
           <div style="text-align: center; margin: 20px 0;">
-            <div style="font-size: 24px; font-weight: bold; letter-spacing: 5px; background-color: #f0f0f0; padding: 10px; border-radius: 5px; display: inline-block;">${otp}</div>
+            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; background-color: #f0f0f0; padding: 15px 20px; border-radius: 8px; display: inline-block; color: #333;">${otp}</div>
           </div>
           
           <p>Please click the link below to access the file and enter this verification code:</p>
@@ -64,26 +57,24 @@ module.exports = async (email, otp, fileInfo, shareLink) => {
           </div>
           
           <p style="color: #666; font-size: 14px; margin-top: 30px;">
-            • This verification code is valid for one-time use only.<br>
-            • If you didn't request this file, you can safely ignore this email.<br>
-            • For security reasons, the link and code will expire after a certain period.
+            &bull; This verification code is valid for one-time use only.<br>
+            &bull; If you didn't request this file, you can safely ignore this email.<br>
+            &bull; For security reasons, the link and code will expire after a certain period.
           </p>
         </div>
       `,
-    };
+    });
 
-    console.log('🔄 Sending share OTP via Gmail...');
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Share OTP email sent successfully via Gmail!');
-    console.log('Message ID:', info.messageId);
-    return { success: true, info };
+    console.log('✅ Share OTP email sent successfully via Resend!');
+    console.log('Response:', JSON.stringify(data));
+    return { success: true, info: data };
   } catch (error) {
-    console.error('❌ Error sending share OTP email via Gmail:');
-    console.error('Error Message:', error.message);
+    console.error('❌ Error sending share OTP email via Resend:');
+    console.error('Error details:', JSON.stringify(error));
 
     return {
       success: false,
-      error: error.message,
+      error: error.message || 'Unknown error',
       details: 'Check backend logs for detailed error information'
     };
   }
