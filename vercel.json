@@ -1,5 +1,5 @@
 {
-    "buildCommand": "cd frontend && npm install && CI=false npx react-scripts build",
+    "buildCommand": "cd frontend && npm install && chmod +x node_modules/.bin/react-scripts && CI=false npm run build",
     "outputDirectory": "frontend/build",
     "rewrites": [
         {
