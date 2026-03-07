@@ -72,12 +72,12 @@ export default function OtpVerification() {
   React.useEffect(() => {
     // Initialize the input refs array
     inputRefs.current = inputRefs.current.slice(0, 6);
-    
+
     // Focus on the first input when component mounts
     if (inputRefs.current[0]) {
       inputRefs.current[0]?.focus();
     }
-    
+
     // Start countdown for resend button
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -89,23 +89,23 @@ export default function OtpVerification() {
         return prev - 1;
       });
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
     const value = e.target.value;
-    
+
     // Only allow numeric input
     if (value && !/^\d+$/.test(value)) {
       return;
     }
-    
+
     // Update OTP state
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1); // Only take the last character if multiple are pasted
     setOtp(newOtp);
-    
+
     // Auto-focus next input if current one is filled
     if (value && index < 5 && inputRefs.current[index + 1]) {
       inputRefs.current[index + 1]?.focus();
@@ -122,20 +122,20 @@ export default function OtpVerification() {
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text/plain').trim();
-    
+
     // Check if pasted content is numeric and has right length
     if (/^\d+$/.test(pastedData)) {
       const pastedOtp = pastedData.slice(0, 6).split('');
       const newOtp = [...otp];
-      
+
       pastedOtp.forEach((digit, index) => {
         if (index < 6) {
           newOtp[index] = digit;
         }
       });
-      
+
       setOtp(newOtp);
-      
+
       // Focus the next empty input or the last one if all filled
       const nextEmptyIndex = newOtp.findIndex(digit => !digit);
       if (nextEmptyIndex !== -1 && inputRefs.current[nextEmptyIndex]) {
@@ -150,7 +150,7 @@ export default function OtpVerification() {
     // Reset countdown and disable resend button
     setCountdown(60);
     setIsResendDisabled(true);
-    
+
     // Start countdown again
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -162,34 +162,44 @@ export default function OtpVerification() {
         return prev - 1;
       });
     }, 1000);
-    
+
     const email = location.state?.email || '';
-    
+
     if (!email) {
       setError('Email information is missing. Please go back to signup.');
       return;
     }
-    
+
     try {
-      // Resend OTP by calling signup endpoint again
-      await axios.post(`${API_BASE_URL}/auth/signup`, {
-        email,
-        // We need to send these fields but they'll be ignored for existing users
-        username: 'resend',
-        phone: 'resend',
-        password: 'resend'
-      });
-      
+      // Try to use the resend-otp endpoint with auth token first
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        await axios.post(`${API_BASE_URL}/auth/resend-otp`, {}, {
+          headers: { 'x-auth-token': token }
+        });
+      } else {
+        // Use public resend endpoint that only requires email
+        const response = await axios.post(`${API_BASE_URL}/auth/resend-otp-public`, {
+          email
+        });
+
+        // If email sending failed, show the manual OTP
+        if (response.data.emailSent === false && response.data.manualOtp) {
+          setError(`Email could not be sent. Manual OTP: ${response.data.manualOtp}`);
+          return;
+        }
+      }
+
       setError('');
     } catch (error: any) {
-      setError('Failed to resend OTP. Please try again.');
+      setError(error.response?.data?.message || 'Failed to resend OTP. Please try again.');
       console.error('Resend OTP error:', error);
     }
   };
 
   const handleVerifyOtp = async () => {
     const otpString = otp.join('');
-    
+
     if (otpString.length !== 6) {
       setError('Please enter the complete 6-digit OTP');
       return;
@@ -198,21 +208,21 @@ export default function OtpVerification() {
     // Get email from location state or use an empty string as fallback
     const email = location.state?.email || '';
     const password = location.state?.password || '';
-    
+
     if (!email) {
       setError('Email information is missing. Please go back to signup.');
       return;
     }
-    
+
     try {
       setLoading(true);
-      
+
       // Make API call to verify OTP
       await axios.post(`${API_BASE_URL}/auth/verify`, {
         email,
         otp: otpString
       });
-      
+
       // If verification successful, automatically log in the user
       if (password) {
         try {
@@ -221,14 +231,14 @@ export default function OtpVerification() {
             email,
             password
           });
-          
+
           // Store token in localStorage
           localStorage.setItem('authToken', loginResponse.data.token);
           localStorage.setItem('user', JSON.stringify(loginResponse.data.user));
-          
+
           // Set the default authorization header for future requests
           axios.defaults.headers.common['x-auth-token'] = loginResponse.data.token;
-          
+
           setLoading(false);
           setError('');
           navigate('/home');
@@ -266,16 +276,16 @@ export default function OtpVerification() {
           >
             Verify your identity
           </Typography>
-          
+
           <Typography variant="body1" sx={{ mb: 2 }}>
-            We've sent a 6-digit verification code to 
+            We've sent a 6-digit verification code to
             {location.state?.email ? ` ${location.state.email}` : ' your email'}
           </Typography>
-          
+
           {location.state?.emailSent === false && (
-            <Box sx={{ 
-              p: 2, 
-              mb: 2, 
+            <Box sx={{
+              p: 2,
+              mb: 2,
               backgroundColor: '#fff3cd',
               border: '1px solid #ffc107',
               borderRadius: 1,
@@ -313,7 +323,7 @@ export default function OtpVerification() {
               </Typography>
             )}
           </FormControl>
-          
+
           <Button
             fullWidth
             variant="contained"
@@ -323,7 +333,7 @@ export default function OtpVerification() {
           >
             {loading ? 'Verifying...' : 'Verify'}
           </Button>
-          
+
           <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
             <Typography variant="body2">
               Didn't receive the code?{' '}
