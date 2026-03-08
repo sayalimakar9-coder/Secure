@@ -1,8 +1,9 @@
-// Load environment variables from .env file (development only)
+// Load environment variables from .env file (not in production)
 // On Render: environment variables are set directly via dashboard
-if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev') {
+if (process.env.NODE_ENV !== 'production') {
   try {
     require('dotenv').config();
+    console.log('✅ dotenv loaded');
   } catch (e) {
     // Ignore if dotenv not available
   }
@@ -22,6 +23,7 @@ const app = express();
 // Configure CORS to allow requests from the frontend
 const allowedOrigins = [
   'https://secure-file-sharing-app-tor7.vercel.app',              // Main production frontend URL
+  'https://secure-olive.vercel.app',                             // New production frontend URL
   'https://secure-file-sharing-app-tor7-9k3qcqmas.vercel.app',    // Preview deployment
   'https://secure-file-sharing-app-tor7-4o7rptkj4.vercel.app',    // Preview deployment
   'http://localhost:3000',  // For local development
@@ -32,12 +34,15 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
-    // Allow if in the explicit list
+
+    // Check if origin is in the explicit list
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow any Vercel preview deployment for this app
-    if (origin.match(/^https:\/\/secure-file-sharing-app-tor7.*\.vercel\.app$/)) {
+
+    // Allow any Vercel deployment for this project (any subdomain or custom domain)
+    if (origin.endsWith('.vercel.app') || origin === 'https://secure-olive.vercel.app') {
       return callback(null, true);
     }
+
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
