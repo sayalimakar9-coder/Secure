@@ -215,12 +215,34 @@ const SharedFileAccess: React.FC = () => {
       }, 100);
 
     } catch (error: any) {
-      console.error('❌ Download error:');
-      console.error('Status:', error.response?.status);
-      console.error('Message:', error.response?.data?.message);
-      console.error('Full error:', error.message);
+      console.error('❌ Download error details:', error);
 
-      setError(error.response?.data?.message || 'Failed to download file. Please try again.');
+      let errorMessage = 'Failed to download file. Please try again.';
+
+      // If the response is a blob (which it is for this request), 
+      // we need to read it as text to find the JSON error message
+      if (error.response?.data instanceof Blob) {
+        try {
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const errorObj = JSON.parse(reader.result as string);
+              setError(errorObj.message || errorMessage);
+            } catch (e) {
+              setError(errorMessage);
+            }
+          };
+          reader.readAsText(error.response.data);
+          setLoading(false);
+          return; // The reader will update the error state
+        } catch (e) {
+          console.error('Failed to parse error blob:', e);
+        }
+      } else {
+        errorMessage = error.response?.data?.message || error.message || errorMessage;
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -411,6 +433,8 @@ const SharedFileAccess: React.FC = () => {
       case 2:
         return (
           <Box sx={{ mt: 3, textAlign: 'center' }}>
+            {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+
             <Alert severity="success" sx={{ mb: 3 }}>
               Verification successful! You now have access to the file.
             </Alert>
