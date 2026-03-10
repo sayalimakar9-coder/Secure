@@ -57,6 +57,11 @@ const shareSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  shareMethod: {
+    type: String,
+    enum: ['link', 'email', 'direct'],
+    default: 'link'
+  },
   expiresAt: {
     type: Date,
     required: true
@@ -66,11 +71,11 @@ const shareSchema = new mongoose.Schema({
 });
 
 // Populate file data when fetching share
-shareSchema.pre('find', function() {
+shareSchema.pre('find', function () {
   this.populate('file', 'originalName size mimetype');
 });
 
-shareSchema.pre('findOne', function() {
+shareSchema.pre('findOne', function () {
   this.populate('file', 'originalName size mimetype');
 });
 

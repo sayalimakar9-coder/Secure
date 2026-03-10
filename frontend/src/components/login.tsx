@@ -17,6 +17,7 @@ import { GoogleIcon, FacebookIcon } from './customicon';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext'; // Import the auth context
 import { API_BASE_URL } from '../config/api';
+import { GoogleLogin } from '@react-oauth/google';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -47,9 +48,9 @@ const LoginContainer = styled(Stack)(({ theme }) => ({
     zIndex: -1,
     inset: 0,
     backgroundImage:
-    theme.palette.mode === 'dark' 
-      ? 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 10%), hsl(0, 0%, 5%))'
-      : 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))',
+      theme.palette.mode === 'dark'
+        ? 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 10%), hsl(0, 0%, 5%))'
+        : 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))',
   },
 }));
 
@@ -62,7 +63,7 @@ export default function Login() {
   });
   const [loading, setLoading] = React.useState(false);
   const [apiError, setApiError] = React.useState('');
-  
+
   // Function to handle manual authentication reset
   const handleClearAuth = () => {
     clearAuth();
@@ -94,20 +95,20 @@ export default function Login() {
     if (!Object.values(newErrors).some(Boolean)) {
       try {
         setLoading(true);
-        
+
         const response = await axios.post(`${API_BASE_URL}/auth/login`, {
           email,
           password
         });
-        
+
         localStorage.setItem('authToken', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
-        
+
         axios.defaults.headers.common['x-auth-token'] = response.data.token;
-        
+
         // Update the auth context state
         login(response.data.token, response.data.user);
-        
+
         setLoading(false);
         navigate('/home');
       } catch (error: any) {
@@ -115,6 +116,32 @@ export default function Login() {
         setApiError(error.response?.data?.message || 'Invalid email or password');
         console.error('Login error:', error);
       }
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    try {
+      setLoading(true);
+      setApiError('');
+
+      const response = await axios.post(`${API_BASE_URL}/auth/google`, {
+        credential: credentialResponse.credential
+      });
+
+      localStorage.setItem('authToken', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+
+      axios.defaults.headers.common['x-auth-token'] = response.data.token;
+
+      // Update the auth context state
+      login(response.data.token, response.data.user);
+
+      setLoading(false);
+      navigate('/home');
+    } catch (error: any) {
+      setLoading(false);
+      setApiError(error.response?.data?.message || 'Google authentication failed');
+      console.error('Google login error:', error);
     }
   };
 
@@ -134,7 +161,7 @@ export default function Login() {
             {apiError}
           </Typography>
         )}
-        
+
         <Box
           component="form"
           onSubmit={handleSubmit}
@@ -180,9 +207,9 @@ export default function Login() {
             </Link>
           </Box>
 
-          <Button 
-            type="submit" 
-            fullWidth 
+          <Button
+            type="submit"
+            fullWidth
             variant="contained"
             disabled={loading}
           >
@@ -192,15 +219,16 @@ export default function Login() {
 
         <Divider>or</Divider>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => alert('Sign in with Google')}
-            startIcon={<GoogleIcon />}
-          >
-            Sign in with Google
-          </Button>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => {
+              setApiError('Google Login Failed');
+              console.log('Login Failed');
+            }}
+            useOneTap
+            width="400"
+          />
           <Button
             fullWidth
             variant="outlined"
@@ -210,7 +238,7 @@ export default function Login() {
             Sign in with Facebook
           </Button>
         </Box>
-        
+
         <Box sx={{ mt: 3, mb: 2 }}>
           <Typography sx={{ textAlign: 'center' }}>
             Don't have an account?{' '}
@@ -219,12 +247,12 @@ export default function Login() {
             </Link>
           </Typography>
         </Box>
-        
+
         {/* Add a discreet button for clearing authentication state */}
         <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center' }}>
-          <Button 
-            variant="text" 
-            color="inherit" 
+          <Button
+            variant="text"
+            color="inherit"
             size="small"
             onClick={handleClearAuth}
             sx={{ fontSize: '0.7rem', color: 'text.secondary' }}

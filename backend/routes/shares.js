@@ -26,39 +26,42 @@ const generateOTP = () => {
 // @access  Private
 router.post('/', auth, async (req, res) => {
   try {
-    const { fileId, recipientEmail, permission, expiryHours, passwordProtect, password } = req.body;
-    
+    const { fileId, recipientEmail, permission, expiryHours, passwordProtect, password, shareMethod } = req.body;
+
     // Validate inputs
     if (!fileId || !recipientEmail || !permission || !expiryHours) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
-    
+
+    const method = shareMethod || 'link'; // Default to link
+
     // Check if file exists and user owns it
     const file = await File.findById(fileId);
     if (!file) {
       return res.status(404).json({ message: 'File not found' });
     }
-    
+
     if (file.owner.toString() !== req.user.id) {
       return res.status(403).json({ message: 'You do not own this file' });
     }
-    
+
     // Generate unique share ID
     const shareId = crypto.randomBytes(16).toString('hex');
-    
-    // Generate OTP for verification
-    const otp = generateOTP();
-    
+
     // Set expiry date
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + parseInt(expiryHours));
-    
-    // Hash password if password protection is enabled
+
+    // Hash password if password protection is enabled (only for link/email methods)
     let hashedPassword = null;
-    if (passwordProtect && password) {
+    if (method !== 'direct' && passwordProtect && password) {
       hashedPassword = await bcrypt.hash(password, 10);
     }
-    
+
+    // For direct shares: no OTP needed, mark as pre-verified
+    // For link/email shares: generate OTP
+    const otp = method === 'direct' ? null : generateOTP();
+
     // Create share record
     const share = new Share({
       file: fileId,
@@ -67,63 +70,77 @@ router.post('/', auth, async (req, res) => {
       shareId,
       otp,
       permission,
-      isPasswordProtected: passwordProtect && !!password,
+      isPasswordProtected: method !== 'direct' && passwordProtect && !!password,
       password: hashedPassword,
       expiresAt,
-      emailDelivered: true // Will be set to false if email fails
+      shareMethod: method,
+      isOtpVerified: method === 'direct', // Direct shares are pre-verified
+      emailDelivered: method === 'email' // Only relevant for email method
     });
-    
+
     await share.save();
-    
-    // Get owner's name for the email
+
+    // Get owner's name
     const owner = await User.findById(req.user.id);
-    
-    // Create environment variable for frontend URL or use a default
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    
-    // Generate share link pointing to the frontend app instead of the backend
     const shareLink = `${frontendUrl}/share/${shareId}`;
-    
-    // Send OTP email to recipient - but continue even if email fails
-    let emailResult;
-    try {
-      console.log('Attempting to send email to:', recipientEmail);
-      console.log('Share link:', shareLink);
-      emailResult = await sendShareOtp(recipientEmail, otp, {
-        fileName: file.originalName,
-        ownerName: owner.username || owner.email,
-        fileSize: file.size
-      }, shareLink);
-      console.log('Email result:', emailResult);
-    } catch (emailError) {
-      // Log error but don't fail the share creation
-      console.error('Error in email sending attempt:', emailError);
-      console.error('Email error details:', emailError.message || 'Unknown email error');
-      emailResult = { 
-        success: false, 
-        error: emailError.message || 'Unknown email error'
-      };
+
+    // Handle based on share method
+    if (method === 'direct') {
+      // Direct share — just create the record, no email, no link needed
+      console.log(`📬 Direct share created: ${file.originalName} → ${recipientEmail}`);
+      return res.json({
+        message: `File shared directly to ${recipientEmail}'s inbox`,
+        shareId,
+        shareMethod: 'direct',
+        emailSent: false,
+        otp: null
+      });
     }
-    
-    // Update share record with email delivery status
-    share.emailDelivered = emailResult && emailResult.success;
-    await share.save();
-    
-    // Return response with share information and email status
-    const responseData = {
-      message: emailResult && emailResult.success 
-        ? 'File shared successfully and notification sent' 
-        : 'File shared successfully but email notification failed',
+
+    if (method === 'email') {
+      // Email share — send OTP email to recipient
+      let emailResult;
+      try {
+        console.log('📧 Attempting to send email to:', recipientEmail);
+        emailResult = await sendShareOtp(recipientEmail, otp, {
+          fileName: file.originalName,
+          ownerName: owner.username || owner.email,
+          fileSize: file.size
+        }, shareLink);
+        console.log('Email result:', emailResult);
+      } catch (emailError) {
+        console.error('Error in email sending:', emailError);
+        emailResult = { success: false, error: emailError.message || 'Unknown email error' };
+      }
+
+      share.emailDelivered = emailResult && emailResult.success;
+      await share.save();
+
+      return res.json({
+        message: emailResult && emailResult.success
+          ? 'File shared successfully and notification sent'
+          : 'File shared successfully but email notification failed',
+        shareId,
+        shareLink,
+        shareMethod: 'email',
+        emailSent: emailResult && emailResult.success,
+        emailDelivered: share.emailDelivered,
+        emailError: emailResult && !emailResult.success ? emailResult.error : null,
+        otp // Always include OTP as fallback
+      });
+    }
+
+    // Link share (default) — just generate the link and OTP, no email
+    console.log(`🔗 Link share created: ${shareLink}`);
+    return res.json({
+      message: 'Share link generated successfully',
       shareId,
       shareLink,
-      emailSent: emailResult && emailResult.success,
-      emailDelivered: share.emailDelivered,
-      emailError: emailResult && !emailResult.success ? emailResult.error : null,
-      otp: emailResult && !emailResult.success ? otp : undefined // Include OTP in response if email failed
-    };
-    
-    console.log('Share creation response:', responseData);
-    res.json(responseData);
+      shareMethod: 'link',
+      emailSent: false,
+      otp
+    });
   } catch (error) {
     console.error('Error creating share:', error);
     res.status(500).json({ message: 'Server error' });
@@ -139,7 +156,7 @@ router.get('/', auth, async (req, res) => {
     const shares = await Share.find({ owner: req.user.id })
       .populate('file', 'originalName size mimetype')
       .sort({ createdAt: -1 });
-    
+
     res.json(shares);
   } catch (error) {
     console.error('Error getting shares:', error);
@@ -153,45 +170,45 @@ router.get('/', auth, async (req, res) => {
 router.get('/verify/:shareId', async (req, res) => {
   try {
     const { shareId } = req.params;
-    
+
     console.log('📋 Share verification request for:', shareId);
-    
+
     if (!shareId || shareId.length === 0) {
       console.error('❌ Invalid shareId provided');
       return res.status(400).json({ message: 'Invalid share ID' });
     }
-    
+
     // Find the share
     const share = await Share.findOne({ shareId })
       .populate('file', 'originalName size');
-    
+
     console.log('🔍 Share found:', share ? 'YES' : 'NO');
-    
+
     if (!share) {
       console.error('❌ Share not found for ID:', shareId);
       return res.status(404).json({ message: 'Share not found' });
     }
-    
+
     if (!share.file) {
       console.error('❌ File associated with share not found');
       return res.status(404).json({ message: 'Associated file not found' });
     }
-    
+
     // Check if share is expired
     const now = new Date();
     console.log('⏰ Checking expiration - Now:', now, 'Expires:', share.expiresAt);
-    
+
     if (now > share.expiresAt) {
       console.warn('⏰ Share has expired');
       return res.status(400).json({ message: 'This share link has expired' });
     }
-    
+
     // Check if share is revoked
     if (share.isRevoked) {
       console.warn('🚫 Share has been revoked');
       return res.status(400).json({ message: 'This share has been revoked' });
     }
-    
+
     // Return basic info about the share
     const responseData = {
       fileName: share.file.originalName,
@@ -200,10 +217,10 @@ router.get('/verify/:shareId', async (req, res) => {
       expiresAt: share.expiresAt,
       emailDelivered: share.emailDelivered // Include email delivery status
     };
-    
+
     console.log('✅ Share verification successful');
     console.log('📦 Response:', JSON.stringify(responseData, null, 2));
-    
+
     res.json(responseData);
   } catch (error) {
     console.error('❌ Error verifying share:');
@@ -220,78 +237,78 @@ router.post('/access/:shareId', async (req, res) => {
   try {
     const { shareId } = req.params;
     const { otp, password } = req.body;
-    
+
     console.log('🔑 Access request for share:', shareId);
     console.log('📝 OTP provided:', otp ? otp.length + ' digits' : 'NONE');
     console.log('🔐 Password provided:', password ? 'YES' : 'NO');
-    
+
     // Find the share with complete file information
     const share = await Share.findOne({ shareId })
       .populate('file', 'originalName size mimetype path encryptionKey encryptionIV storedName');
-    
+
     if (!share) {
       console.error('❌ Share not found:', shareId);
       return res.status(404).json({ message: 'Share not found' });
     }
-    
+
     console.log('✓ Share found');
-    
+
     // Check if share is expired
     const now = new Date();
     if (now > share.expiresAt) {
       console.warn('⏰ Share expired at:', share.expiresAt);
       return res.status(400).json({ message: 'This share link has expired' });
     }
-    
+
     // Check if share is revoked
     if (share.isRevoked) {
       console.warn('🚫 Share is revoked');
       return res.status(400).json({ message: 'This share has been revoked' });
     }
-    
+
     // Verify OTP
     console.log('🔍 Verifying OTP - Expected:', share.otp, 'Provided:', otp);
-    if (share.otp !== otp) {
+    if (String(share.otp).trim() !== String(otp).trim()) {
       console.warn('❌ OTP mismatch');
       return res.status(400).json({ message: 'Invalid OTP' });
     }
-    
+
     console.log('✅ OTP verified');
-    
+
     // Verify password if required
     if (share.isPasswordProtected) {
       if (!password) {
         console.warn('❌ Password required but not provided');
         return res.status(400).json({ message: 'Password is required' });
       }
-      
+
       const isPasswordValid = await bcrypt.compare(password, share.password);
       if (!isPasswordValid) {
         console.warn('❌ Password invalid');
         return res.status(400).json({ message: 'Invalid password' });
       }
-      
+
       console.log('✅ Password verified');
     }
-    
+
     // Generate access token
     const accessToken = jwt.sign(
       { shareId: share.shareId },
       process.env.JWT_SECRET || 'your_jwt_secret',
       { expiresIn: '1h' }
     );
-    
+
     console.log('🎫 Access token generated');
-    
+
     // Update share record
     share.isOtpVerified = true;
     share.accessToken = accessToken;
     share.accessCount += 1;
     share.lastAccessed = new Date();
     await share.save();
-    
+
     console.log('💾 Share record updated');
-    
+
     // Return access token and file info
     const responseData = {
       accessToken,
@@ -307,14 +324,14 @@ router.post('/access/:shareId', async (req, res) => {
       },
       permission: share.permission
     };
-    
+
     console.log('✅ Access granted successfully');
-    console.log('📦 Response:', JSON.stringify({ 
-      accessToken: accessToken.substring(0, 20) + '...', 
+    console.log('📦 Response:', JSON.stringify({
+      accessToken: accessToken.substring(0, 20) + '...',
       permission: responseData.permission,
       fileName: responseData.file.originalName
     }, null, 2));
-    
+
     res.json(responseData);
   } catch (error) {
     console.error('❌ Error accessing shared file:');
@@ -331,13 +348,13 @@ router.get('/download/:shareId', async (req, res) => {
   try {
     const { shareId } = req.params;
     const accessToken = req.header('x-access-token');
-    
+
     console.log(`Download request for share ${shareId} with token: ${accessToken ? 'provided' : 'missing'}`);
-    
+
     if (!accessToken) {
       return res.status(401).json({ message: 'Access token is required' });
     }
-    
+
     // Verify access token - try both secrets to handle tokens already issued
     let decoded;
     try {
@@ -353,35 +370,35 @@ router.get('/download/:shareId', async (req, res) => {
       console.error('JWT verification error:', err.message);
       return res.status(401).json({ message: 'Invalid or expired access token' });
     }
-    
+
     console.log('Token verified successfully, decoded payload:', decoded);
-    
+
     // Check if token belongs to this share
     if (decoded.shareId !== shareId) {
       return res.status(401).json({ message: 'Invalid access token for this share' });
     }
-    
+
     // First get the share id
     const share = await Share.findOne({ shareId });
-    
+
     if (!share) {
       return res.status(404).json({ message: 'Share not found' });
     }
-    
+
     // Then get the file separately with a direct query
     const file = await File.findById(share.file);
-    
+
     if (!file) {
       return res.status(404).json({ message: 'File not found' });
     }
-    
+
     console.log('Share found:', {
       id: share._id,
       fileId: share.file,
       permission: share.permission,
       expiresAt: share.expiresAt
     });
-    
+
     console.log('File details from direct query:', {
       id: file._id,
       path: file.path,
@@ -389,22 +406,22 @@ router.get('/download/:shareId', async (req, res) => {
       originalName: file.originalName,
       exists: file.path ? fs.existsSync(file.path) : false
     });
-    
+
     // Check if share is expired
     if (new Date() > share.expiresAt) {
       return res.status(400).json({ message: 'This share link has expired' });
     }
-    
+
     // Check if share is revoked
     if (share.isRevoked) {
       return res.status(400).json({ message: 'This share has been revoked' });
     }
-    
+
     // Check permission level
     if (share.permission === 'view') {
       return res.status(403).json({ message: 'Download permission not granted' });
     }
-    
+
     // If file path doesn't exist, reconstruct it
     let filePath = file.path;
     if (!filePath || !fs.existsSync(filePath)) {
@@ -412,15 +429,15 @@ router.get('/download/:shareId', async (req, res) => {
       filePath = path.join(__dirname, '..', 'uploads', file.storedName);
       console.log(`Reconstructed file path: ${filePath}`);
     }
-    
+
     // Final check if file exists
     if (!fs.existsSync(filePath)) {
       console.error(`File not found on disk: ${filePath}`);
       return res.status(404).json({ message: 'File not found on server' });
     }
-    
+
     console.log(`File found, decrypting: ${filePath}`);
-    
+
     try {
       // Decrypt the file
       const tempFilePath = await decryptToTemporary(
@@ -429,23 +446,23 @@ router.get('/download/:shareId', async (req, res) => {
         file.encryptionIV,
         file.originalName
       );
-      
+
       console.log(`File decrypted successfully to: ${tempFilePath}`);
-      
+
       // Make sure the temp file exists
       if (!fs.existsSync(tempFilePath)) {
         console.error(`Temp file not found: ${tempFilePath}`);
         return res.status(500).json({ message: 'Error preparing file for download' });
       }
-      
+
       // Set appropriate headers
       res.setHeader('Content-Type', file.mimetype || 'application/octet-stream');
       const encodedFileName = encodeURIComponent(file.originalName);
       res.setHeader('Content-Disposition', 'attachment; filename="' + encodedFileName + '"');
-      
+
       // Stream the file instead of using res.download for better error handling
       const fileStream = fs.createReadStream(tempFilePath);
-      
+
       // Handle stream errors
       fileStream.on('error', (err) => {
         console.error('Error streaming file:', err);
@@ -453,7 +470,7 @@ router.get('/download/:shareId', async (req, res) => {
           res.status(500).json({ message: 'Error streaming file' });
         }
       });
-      
+
       // When the download is complete, clean up the temp file
       fileStream.on('close', async () => {
         try {
@@ -465,7 +482,7 @@ router.get('/download/:shareId', async (req, res) => {
           console.error('Error deleting temp file:', err);
         }
       });
-      
+
       // Pipe the file to the response
       fileStream.pipe(res);
     } catch (decryptionError) {
@@ -479,27 +496,42 @@ router.get('/download/:shareId', async (req, res) => {
 });
 
 // @route   GET api/shares/received
-// @desc    Get files shared with the logged-in user
+// @desc    Get all files shared with the current user
 // @access  Private
 router.get('/received', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    // Find all shares where recipient email matches the logged-in user's email
-    const receivedShares = await Share.find({ 
-      recipientEmail: user.email,
+
+    // Find all active shares for this user's email (case-insensitive)
+    const allShares = await Share.find({
+      recipientEmail: { $regex: new RegExp(`^${user.email.trim()}$`, 'i') },
       isRevoked: false,
-      expiresAt: { $gt: new Date() } // Only active shares
+      expiresAt: { $gt: new Date() }
     })
       .populate('file', 'originalName size mimetype')
       .populate('owner', 'username email')
       .sort({ createdAt: -1 });
-    
-    res.json(receivedShares);
+
+    // Deduplicate by file ID: Keep only the latest share for each file
+    const uniqueFiles = new Map();
+    const deduplicatedShares = [];
+
+    for (const share of allShares) {
+      // Skip if file was deleted or null
+      if (!share.file || !share.file._id) continue;
+
+      const fileId = share.file._id.toString();
+      if (!uniqueFiles.has(fileId)) {
+        uniqueFiles.set(fileId, true);
+        deduplicatedShares.push(share);
+      }
+    }
+
+    console.log(`📥 Found ${deduplicatedShares.length} unique received files for ${user.email}`);
+    res.json(deduplicatedShares);
   } catch (error) {
     console.error('Error fetching received shares:', error);
     res.status(500).json({ message: 'Server error' });
@@ -512,23 +544,109 @@ router.get('/received', auth, async (req, res) => {
 router.delete('/:id', auth, async (req, res) => {
   try {
     const share = await Share.findById(req.params.id);
-    
+
     if (!share) {
       return res.status(404).json({ message: 'Share not found' });
     }
-    
+
     // Check if user owns the share
     if (share.owner.toString() !== req.user.id) {
       return res.status(403).json({ message: 'You do not own this share' });
     }
-    
+
     // Revoke the share
     share.isRevoked = true;
     await share.save();
-    
+
     res.json({ message: 'Share revoked successfully' });
   } catch (error) {
     console.error('Error revoking share:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET api/shares/received/download/:shareId
+// @desc    Download a file that was directly shared with the logged-in user
+// @access  Private (authenticated recipient)
+router.get('/received/download/:shareId', auth, async (req, res) => {
+  try {
+    const { shareId } = req.params;
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Find the share and verify recipient
+    const share = await Share.findOne({
+      _id: shareId,
+      recipientEmail: user.email,
+      isRevoked: false,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!share) {
+      return res.status(404).json({ message: 'Share not found or expired' });
+    }
+
+    if (share.permission === 'view') {
+      return res.status(403).json({ message: 'Download permission not granted' });
+    }
+
+    // Get the file
+    const file = await File.findById(share.file);
+    if (!file) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    // Reconstruct file path if needed
+    let filePath = file.path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      filePath = path.join(__dirname, '..', 'uploads', file.storedName);
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'File not found on server' });
+    }
+
+    try {
+      const tempFilePath = await decryptToTemporary(
+        filePath,
+        file.encryptionKey,
+        file.encryptionIV,
+        file.originalName
+      );
+
+      res.setHeader('Content-Type', file.mimetype || 'application/octet-stream');
+      const encodedFileName = encodeURIComponent(file.originalName);
+      res.setHeader('Content-Disposition', 'attachment; filename="' + encodedFileName + '"');
+
+      const fileStream = fs.createReadStream(tempFilePath);
+
+      fileStream.on('error', (err) => {
+        console.error('Error streaming file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Error streaming file' });
+        }
+      });
+
+      fileStream.on('close', async () => {
+        try {
+          if (fs.existsSync(tempFilePath)) {
+            await unlinkAsync(tempFilePath);
+          }
+        } catch (err) {
+          console.error('Error deleting temp file:', err);
+        }
+      });
+
+      fileStream.pipe(res);
+    } catch (decryptionError) {
+      console.error('Decryption error:', decryptionError);
+      return res.status(500).json({ message: 'Error decrypting file' });
+    }
+  } catch (error) {
+    console.error('Error downloading received file:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

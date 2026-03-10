@@ -15,7 +15,9 @@ import MuiCard from '@mui/material/Card';
 import { styled } from '@mui/material/styles';
 import { GoogleIcon, FacebookIcon } from './customicon';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
+import { GoogleLogin } from '@react-oauth/google';
 
 const Card = styled(MuiCard)(({ theme }) => ({
   display: 'flex',
@@ -28,8 +30,8 @@ const Card = styled(MuiCard)(({ theme }) => ({
   [theme.breakpoints.up('sm')]: {
     maxWidth: '450px',
   },
-  boxShadow: theme.palette.mode === 'dark' 
-    ? '0px 5px 15px 0px rgba(0, 0, 0, 0.5), 0px 15px 35px -5px rgba(0, 0, 0, 0.5)' 
+  boxShadow: theme.palette.mode === 'dark'
+    ? '0px 5px 15px 0px rgba(0, 0, 0, 0.5), 0px 15px 35px -5px rgba(0, 0, 0, 0.5)'
     : 'hsla(220, 30%, 5%, 0.05) 0px 5px 15px 0px, hsla(220, 25%, 10%, 0.05) 0px 15px 35px -5px',
   overflow: 'visible',
 }));
@@ -47,14 +49,15 @@ const SignUpContainer = styled(Stack)(({ theme }) => ({
     zIndex: -1,
     inset: 0,
     backgroundImage:
-    theme.palette.mode === 'dark' 
-      ? 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 10%), hsl(0, 0%, 5%))'
-      : 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))',
+      theme.palette.mode === 'dark'
+        ? 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 10%), hsl(0, 0%, 5%))'
+        : 'radial-gradient(ellipse at 50% 50%, hsl(210, 100%, 97%), hsl(0, 0%, 100%))',
   },
 }));
 
 export default function SignUp() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [errors, setErrors] = React.useState({
     username: '',
     email: '',
@@ -64,6 +67,32 @@ export default function SignUp() {
   });
   const [loading, setLoading] = React.useState(false);
   const [apiError, setApiError] = React.useState('');
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    try {
+      setLoading(true);
+      setApiError('');
+
+      const response = await axios.post(`${API_BASE_URL}/auth/google`, {
+        credential: credentialResponse.credential
+      });
+
+      localStorage.setItem('authToken', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+
+      axios.defaults.headers.common['x-auth-token'] = response.data.token;
+
+      // Update the auth context state
+      login(response.data.token, response.data.user);
+
+      setLoading(false);
+      navigate('/home');
+    } catch (error: any) {
+      setLoading(false);
+      setApiError(error.response?.data?.message || 'Google signup failed');
+      console.error('Google signup error:', error);
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -112,23 +141,23 @@ export default function SignUp() {
         // Make API call using config
         const response = await axios.post(
           `${API_BASE_URL}/auth/register`, {
-            username,
-            email,
-            phone: phoneNumber,
-            password,
-          });
+          username,
+          email,
+          phone: phoneNumber,
+          password,
+        });
 
         setLoading(false);
-        
+
         // Navigate to OTP verification page - even if email failed, show manual OTP option
-        navigate('/verify-otp', { 
-          state: { 
-            email, 
+        navigate('/verify-otp', {
+          state: {
+            email,
             password,
             emailSent: response.data.emailSent,
             manualOtp: response.data.manualOtp,
             emailError: response.data.emailError
-          } 
+          }
         });
       } catch (error: any) {
         setLoading(false);
@@ -250,15 +279,16 @@ export default function SignUp() {
 
         <Divider>or</Divider>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => alert('Sign up with Google')}
-            startIcon={<GoogleIcon />}
-          >
-            Sign up with Google
-          </Button>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => {
+              setApiError('Google Sign Up Failed');
+              console.log('Sign Up Failed');
+            }}
+            useOneTap
+            width="400"
+          />
           <Button
             fullWidth
             variant="outlined"

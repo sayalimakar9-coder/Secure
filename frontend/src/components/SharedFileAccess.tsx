@@ -43,44 +43,41 @@ const SharedFileAccess: React.FC = () => {
   const [fileInfo, setFileInfo] = useState<any>(null);
   const [permissionLevel, setPermissionLevel] = useState('');
   const [manualOtp, setManualOtp] = useState(''); // For displaying OTP when email fails
-  
-  // Initialize by verifying the share exists - fresh build trigger
+
+  // Initialize by verifying the share exists
   useEffect(() => {
-    console.log('SharedFileAccess: Verifying share access', shareId);
+    console.log('🔗 SharedFileAccess mounted. shareId:', shareId);
+    console.log('📍 Current API_BASE_URL:', API_BASE_URL);
+
     const verifyShare = async () => {
       if (!shareId) {
-        console.error('❌ No shareId found in URL');
-        setError('Invalid share link');
+        console.error('❌ No shareId found in URL parameters');
+        setError('No share ID provided in the link.');
         setLoading(false);
         return;
       }
-      
-      console.log('🔍 Verifying share with ID:', shareId);
-      console.log('📍 API_BASE_URL:', API_BASE_URL);
-      
+
       try {
+        setLoading(true);
         const url = `${API_BASE_URL}/shares/verify/${shareId}`;
-        console.log('🌐 Fetching from URL:', url);
-        
-        const response = await axios.get(url, {
-          timeout: 10000 // 10 second timeout
-        });
-        
-        console.log('✅ Share verification successful');
+        console.log('🌐 Verifying share at:', url);
+
+        const response = await axios.get(url, { timeout: 15000 });
+        console.log('✅ Share verified successfully', response.data);
         console.log('📦 Response data:', response.data);
-        
+
         if (!response.data) {
           throw new Error('Empty response from server');
         }
-        
+
         setShareInfo(response.data);
-        
+
         // If manual OTP is provided (email failed), store it
         if (response.data.manualOtp) {
           console.log('⚠️ Manual OTP provided:', response.data.manualOtp);
           setManualOtp(response.data.manualOtp);
         }
-        
+
         setActiveStep(1); // Move to OTP step if share exists
         setLoading(false);
       } catch (error: any) {
@@ -88,7 +85,7 @@ const SharedFileAccess: React.FC = () => {
         console.error('Error message:', error.message);
         console.error('Error status:', error.response?.status);
         console.error('Error data:', error.response?.data);
-        
+
         if (error.code === 'ECONNABORTED') {
           setError('Connection timeout - please check your internet and try again');
         } else if (error.response?.status === 404) {
@@ -100,60 +97,60 @@ const SharedFileAccess: React.FC = () => {
         } else {
           setError(error.response?.data?.message || 'This share link is invalid or has expired');
         }
-        
+
         setLoading(false);
       }
     };
-    
+
     verifyShare();
   }, [shareId]);
-  
+
   const handleOtpChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Allow only numeric values
     const value = e.target.value.replace(/[^0-9]/g, '');
     setOtp(value);
   };
-  
+
   const handlePasswordToggle = () => {
     setShowPassword(!showPassword);
   };
-  
+
   const handleVerifyOtp = async () => {
     console.log('🔐 OTP Verification - Length:', otp.length);
-    
+
     if (otp.length !== 6) {
       console.warn('⚠️ Invalid OTP length:', otp.length);
       setError('Please enter a valid 6-digit OTP');
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
       const data: any = {
         otp
       };
-      
+
       if (shareInfo.isPasswordProtected && password) {
         data.password = password;
         console.log('🔐 Password included in request');
       }
-      
+
       const url = `${API_BASE_URL}/shares/access/${shareId}`;
       console.log('🌐 Sending OTP verification to:', url);
       console.log('📤 Request data:', { otp: '****', hasPassword: !!data.password });
-      
+
       const response = await axios.post(url, data);
-      
+
       console.log('✅ OTP verification successful');
       console.log('📦 Response:', response.data);
-      
+
       setAccessToken(response.data.accessToken);
       setFileInfo(response.data.file);
-      
+
       // Store the permission level to conditionally show/hide download button
       setPermissionLevel(response.data.permission);
-      
+
       setActiveStep(2); // Move to file access step
       setError('');
     } catch (error: any) {
@@ -161,30 +158,30 @@ const SharedFileAccess: React.FC = () => {
       console.error('Error status:', error.response?.status);
       console.error('Error message:', error.response?.data?.message);
       console.error('Full error:', error.message);
-      
+
       setError(error.response?.data?.message || 'Invalid OTP or password');
     } finally {
       setLoading(false);
     }
   };
-  
+
   const handleDownloadFile = async () => {
     if (!fileInfo || !accessToken) {
       console.error('❌ Missing file info or access token');
       return;
     }
-    
+
     try {
       setLoading(true);
-      
+
       // Create download URL
       const downloadUrl = `${API_BASE_URL}/shares/download/${shareId}`;
-      
+
       console.log('📥 Download request starting...');
       console.log('URL:', downloadUrl);
       console.log('File:', fileInfo.originalName);
       console.log('Size:', fileInfo.size);
-      
+
       // Use axios to get the file with proper headers
       const response = await axios({
         url: downloadUrl,
@@ -195,14 +192,14 @@ const SharedFileAccess: React.FC = () => {
         },
         timeout: 30000
       });
-      
+
       console.log('✅ File downloaded successfully');
       console.log('Response size:', response.data.size);
-      
+
       // Create a blob URL and trigger download
       const blob = new Blob([response.data]);
       const url = window.URL.createObjectURL(blob);
-      
+
       // Create and click a temporary download link
       const link = document.createElement('a');
       link.href = url;
@@ -210,25 +207,25 @@ const SharedFileAccess: React.FC = () => {
       document.body.appendChild(link);
       console.log('📥 Triggering download for:', link.download);
       link.click();
-      
+
       // Clean up
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 100);
-      
+
     } catch (error: any) {
       console.error('❌ Download error:');
       console.error('Status:', error.response?.status);
       console.error('Message:', error.response?.data?.message);
       console.error('Full error:', error.message);
-      
+
       setError(error.response?.data?.message || 'Failed to download file. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-  
+
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -236,7 +233,7 @@ const SharedFileAccess: React.FC = () => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
-  
+
   const renderStepContent = () => {
     switch (activeStep) {
       case 0:
@@ -259,65 +256,65 @@ const SharedFileAccess: React.FC = () => {
             )}
           </Box>
         );
-      
+
       case 1:
         return (
           <Box sx={{ mt: 3 }}>
             {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-            
+
             {loading && !shareInfo && (
               <Box sx={{ textAlign: 'center', py: 3 }}>
                 <CircularProgress sx={{ mb: 2 }} />
                 <Typography>Loading share information...</Typography>
               </Box>
             )}
-            
+
             {shareInfo ? (
               <>
                 <Typography variant="h6" gutterBottom>
                   File Access Verification
                 </Typography>
-                
+
                 <Box sx={{ mb: 3 }}>
                   <Stack spacing={2} direction="row" alignItems="center" sx={{ mb: 2 }}>
                     <DescriptionIcon color="primary" />
                     <Typography variant="body1">{shareInfo.fileName}</Typography>
                     {shareInfo.fileSize && (
-                      <Chip 
-                        label={`${formatBytes(shareInfo.fileSize)}`} 
-                        size="small" 
+                      <Chip
+                        label={`${formatBytes(shareInfo.fileSize)}`}
+                        size="small"
                         variant="outlined"
                       />
                     )}
                   </Stack>
-                  
+
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     This file was shared with you. Please enter the OTP sent to your email to access it.
                   </Typography>
-                  
+
                   {/* Display message when email delivery failed */}
                   {!shareInfo.emailDelivered && (
                     <Alert severity="warning" sx={{ mb: 2 }}>
                       <Typography variant="body2">
-                        <strong>⚠️ Email Delivery Issue:</strong> The verification code could not be sent to your email due to a technical issue. 
+                        <strong>⚠️ Email Delivery Issue:</strong> The verification code could not be sent to your email due to a technical issue.
                       </Typography>
                       <Typography variant="body2" sx={{ mt: 1 }}>
                         Please ask the person who shared this file to provide you with the 6-digit verification code.
                       </Typography>
                     </Alert>
                   )}
-                  
+
                   {/* Display manual OTP when provided (share creator fallback) */}
                   {manualOtp && (
                     <Alert severity="success" sx={{ mb: 2 }}>
                       <Typography variant="body2" gutterBottom>
                         ✓ <strong>Verification Code:</strong> Here's your code to share with the recipient:
                       </Typography>
-                      <Box 
-                        sx={{ 
+                      <Box
+                        sx={{
                           mt: 1,
-                          p: 1.5, 
-                          backgroundColor: '#e8f5e9', 
+                          p: 1.5,
+                          backgroundColor: '#e8f5e9',
                           border: '2px solid #4caf50',
                           borderRadius: 1,
                           textAlign: 'center'
@@ -327,8 +324,8 @@ const SharedFileAccess: React.FC = () => {
                           {manualOtp}
                         </Typography>
                       </Box>
-                      <Button 
-                        size="small" 
+                      <Button
+                        size="small"
                         variant="outlined"
                         sx={{ mt: 1 }}
                         onClick={() => {
@@ -340,7 +337,7 @@ const SharedFileAccess: React.FC = () => {
                       </Button>
                     </Alert>
                   )}
-                  
+
                   <Divider sx={{ my: 2 }} />
                 </Box>
               </>
@@ -349,7 +346,7 @@ const SharedFileAccess: React.FC = () => {
                 Loading file information...
               </Alert>
             )}
-            
+
             <TextField
               label="One-Time Password (OTP)"
               placeholder="Enter 6-digit OTP"
@@ -367,7 +364,7 @@ const SharedFileAccess: React.FC = () => {
                 ),
               }}
             />
-            
+
             {shareInfo?.isPasswordProtected && (
               <TextField
                 label="Password"
@@ -396,7 +393,7 @@ const SharedFileAccess: React.FC = () => {
                 }}
               />
             )}
-            
+
             <Button
               variant="contained"
               color="primary"
@@ -410,40 +407,40 @@ const SharedFileAccess: React.FC = () => {
             </Button>
           </Box>
         );
-      
+
       case 2:
         return (
           <Box sx={{ mt: 3, textAlign: 'center' }}>
             <Alert severity="success" sx={{ mb: 3 }}>
               Verification successful! You now have access to the file.
             </Alert>
-            
-            <Paper 
-              elevation={3} 
-              sx={{ 
-                p: 3, 
-                mb: 3, 
-                display: 'flex', 
+
+            <Paper
+              elevation={3}
+              sx={{
+                p: 3,
+                mb: 3,
+                display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center'
               }}
             >
               <DescriptionIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-              
+
               <Typography variant="h6" gutterBottom>
                 {fileInfo?.originalName || 'File'}
               </Typography>
-              
+
               {fileInfo?.size && (
-                <Chip 
-                  label={formatBytes(fileInfo.size)} 
-                  size="small" 
+                <Chip
+                  label={formatBytes(fileInfo.size)}
+                  size="small"
                   sx={{ mb: 2 }}
                 />
               )}
-              
+
               <Divider sx={{ width: '100%', my: 2 }} />
-              
+
               {permissionLevel !== 'view' ? (
                 <Button
                   variant="contained"
@@ -460,14 +457,14 @@ const SharedFileAccess: React.FC = () => {
                   This file was shared with view-only permission and cannot be downloaded.
                 </Alert>
               )}
-              
+
               <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
                 You can download this file as long as the share remains active.
               </Typography>
             </Paper>
           </Box>
         );
-      
+
       default:
         return (
           <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -478,32 +475,30 @@ const SharedFileAccess: React.FC = () => {
         );
     }
   };
-  
+
   return (
-    <ThemeWrapper>
-      <Box sx={{ maxWidth: 600, mx: 'auto', p: 3 }}>
-        <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h5" align="center" gutterBottom>
-            Secure File Access
-          </Typography>
-          
-          <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-            {steps.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-          
-          {renderStepContent() || (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <CircularProgress sx={{ mb: 2 }} />
-              <Typography>Loading...</Typography>
-            </Box>
-          )}
-        </Paper>
-      </Box>
-    </ThemeWrapper>
+    <Box sx={{ maxWidth: 600, mx: 'auto', p: 3 }}>
+      <Paper elevation={3} sx={{ p: 4 }}>
+        <Typography variant="h5" align="center" gutterBottom>
+          Secure File Access
+        </Typography>
+
+        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+          {steps.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+
+        {renderStepContent() || (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <CircularProgress sx={{ mb: 2 }} />
+            <Typography>Loading...</Typography>
+          </Box>
+        )}
+      </Paper>
+    </Box>
   );
 };
 

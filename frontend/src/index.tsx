@@ -5,13 +5,21 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import AuthProvider from './context/AuthContext'; // Import the AuthProvider
 
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
+
+// Get Google Client ID from environment or use placeholder
+const googleClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || 'your-google-client-id';
+
 root.render(
-  <AuthProvider>
-    <App />
-  </AuthProvider>
+  <GoogleOAuthProvider clientId={googleClientId}>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </GoogleOAuthProvider>
 );
 
 // If you want to start measuring performance in your app, pass a function

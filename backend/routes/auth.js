@@ -2,14 +2,75 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/user');
 const auth = require('../middleware/auth');
 const sendOtp = require('../utils/otp');
+const { OAuth2Client } = require('google-auth-library');
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Generate random 6-digit OTP
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
+
+// @route   POST api/auth/google
+// @desc    Google login/register
+// @access  Public
+router.post('/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ message: 'Google credential is required' });
+    }
+
+    // Verify Google ID token
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const { sub, email, name, picture } = payload;
+
+    // Check if user exists
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Create new user if they don't exist
+      user = new User({
+        username: name || email.split('@')[0],
+        email: email,
+        password: crypto.randomBytes(16).toString('hex'), // Random password for OAuth users
+        isVerified: true, // Google accounts are pre-verified
+        avatar: picture
+      });
+      await user.save();
+    }
+
+    // Create and return token
+    const token = jwt.sign(
+      { user: { id: user.id } },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        isVerified: user.isVerified,
+        avatar: user.avatar
+      }
+    });
+  } catch (error) {
+    console.error('Google login error:', error);
+    res.status(500).json({ message: 'Google authentication failed' });
+  }
+});
 
 // @route   POST api/auth/register
 // @desc    Register a user
@@ -52,7 +113,11 @@ router.post('/register', async (req, res) => {
     let emailSent = true;
     let emailError = null;
     try {
-      await sendOtp(email, otp);
+      const result = await sendOtp(email, otp);
+      if (result && !result.success) {
+        emailSent = false;
+        emailError = result.error || 'Email sending failed';
+      }
     } catch (emailErr) {
       console.error('Email sending error:', emailErr.message);
       emailSent = false;
@@ -63,7 +128,7 @@ router.post('/register', async (req, res) => {
     const token = jwt.sign(
       { user: { id: user.id } },
       process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '1h' }
+      { expiresIn: '24h' }
     );
 
     res.json({
@@ -76,7 +141,7 @@ router.post('/register', async (req, res) => {
       },
       emailSent,
       emailError,
-      manualOtp: !emailSent ? otp : undefined
+      manualOtp: otp // Always include OTP so user can verify even if email fails
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -105,7 +170,7 @@ router.post('/verify', async (req, res) => {
       return res.status(400).json({ message: 'User already verified' });
     }
 
-    if (user.otp !== otp) {
+    if (String(user.otp).trim() !== String(otp).trim()) {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
@@ -246,6 +311,31 @@ router.post('/resend-otp-public', async (req, res) => {
     });
   } catch (error) {
     console.error('Resend OTP public error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @route   GET api/auth/validate
+// @desc    Validate JWT token (used by frontend on page load to persist session)
+// @access  Private
+router.get('/validate', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password -otp');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({
+      valid: true,
+      user: {
+        id: user.id,
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -25,10 +25,10 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   user: null,
   token: null,
-  login: () => {},
-  logout: () => {},
+  login: () => { },
+  logout: () => { },
   loading: true,
-  clearAuth: () => {}, // Added to default context
+  clearAuth: () => { }, // Added to default context
 });
 
 // Hook to use the auth context
@@ -61,32 +61,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true);
       const storedToken = localStorage.getItem('authToken');
       const storedUser = localStorage.getItem('user');
-      
+
       if (storedToken && storedUser) {
         try {
           const parsedUser = JSON.parse(storedUser);
-          
-          // Validate the token by making a request to your backend
+
+          // Set the token and user immediately so the user is not logged out while we validate
+          setToken(storedToken);
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+          axios.defaults.headers.common['x-auth-token'] = storedToken;
+
+          // Validate the token by making a request to the backend
           try {
-            // Try to validate token with a backend request
-            // Using void to acknowledge we're ignoring the response intentionally
             await axios.get(`${API_BASE_URL}/auth/validate`, {
-              headers: { 'x-auth-token': storedToken }
+              headers: { 'x-auth-token': storedToken },
+              timeout: 8000,
             });
-            
-            // If request is successful, token is valid
-            setToken(storedToken);
-            setUser(parsedUser);
-            setIsAuthenticated(true);
-            
-            // Set default auth header for axios
-            axios.defaults.headers.common['x-auth-token'] = storedToken;
-            
-            console.log("Auth initialized: User is authenticated");
-          } catch (validationError) {
-            // Token validation failed
-            console.error('Token validation failed:', validationError);
-            clearAuth(); // Clear invalid auth data
+            console.log("Auth initialized: Token validated successfully");
+          } catch (validationError: any) {
+            // Only clear auth on explicit 401 (invalid/expired token)
+            if (validationError.response && validationError.response.status === 401) {
+              console.warn('Token is invalid or expired, clearing auth');
+              clearAuth();
+            } else {
+              // Network error, timeout, or server down — keep the user logged in
+              console.warn('Backend unreachable for validation, keeping stored session:', validationError.message);
+            }
           }
         } catch (error) {
           // If there's an error parsing the user data, clear the storage
@@ -100,11 +101,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setIsAuthenticated(false);
         console.log("Auth initialized: No stored credentials found");
       }
-      
+
       // Set loading to false regardless of outcome
       setLoading(false);
     };
-    
+
     initializeAuth();
   }, []);
 
@@ -112,10 +113,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = (newToken: string, newUser: User) => {
     localStorage.setItem('authToken', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
-    
+
     // Set default auth header for axios
     axios.defaults.headers.common['x-auth-token'] = newToken;
-    
+
     setToken(newToken);
     setUser(newUser);
     setIsAuthenticated(true);
@@ -124,19 +125,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Logout function with improved cleanup
   const logout = () => {
     console.log("Logout called - clearing authentication state");
-    
+
     // Clear localStorage
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
-    
+
     // Remove auth header from axios defaults
     delete axios.defaults.headers.common['x-auth-token'];
-    
+
     // Reset context state
     setToken(null);
     setUser(null);
     setIsAuthenticated(false);
-    
+
     // Add a small delay to help prevent navigation issues
     setTimeout(() => {
       console.log("Authentication state cleared successfully");

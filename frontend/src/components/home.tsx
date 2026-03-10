@@ -17,6 +17,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import ShareIcon from '@mui/icons-material/Share';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InboxIcon from '@mui/icons-material/Inbox';
 import FileUpload from './FileUpload';
 import FileShareModal from './FileShareModal';
 import axios from 'axios';
@@ -62,6 +63,7 @@ export default function Home() {
   const [tabValue, setTabValue] = useState(0);
   const [files, setFiles] = useState<any[]>([]);
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
+  const [receivedFiles, setReceivedFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [storageInfo, setStorageInfo] = useState({
@@ -69,25 +71,25 @@ export default function Home() {
     total: 1073741824, // 1GB default
     percentUsed: 0
   });
-  
+
   // File sharing state
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<any>(null);
-  
+
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<any>(null);
   const [deletingFile, setDeletingFile] = useState(false);
-  
+
   // Notification snackbar
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  
+
   // Revoke share confirmation dialog state
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [shareToRevoke, setShareToRevoke] = useState<any>(null);
   const [revokingShare, setRevokingShare] = useState(false);
-  
+
   useEffect(() => {
     // Check if user is authenticated
     const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
@@ -95,42 +97,46 @@ export default function Home() {
       navigate('/signin');
       return;
     }
-    
+
     // Fetch user files and storage info
     fetchUserData();
   }, [navigate]);
-  
+
   const fetchUserData = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
-      
-      const [filesResponse, sharesResponse, userResponse] = await Promise.all([
+
+      const [filesResponse, sharesResponse, receivedResponse, userResponse] = await Promise.all([
         axios.get(`${API_BASE_URL}/files`, {
           headers: { 'x-auth-token': token }
         }),
         axios.get(`${API_BASE_URL}/shares`, {
           headers: { 'x-auth-token': token }
         }),
+        axios.get(`${API_BASE_URL}/shares/received`, {
+          headers: { 'x-auth-token': token }
+        }).catch(() => ({ data: [] })),
         axios.get(`${API_BASE_URL}/auth/profile`, {
           headers: { 'x-auth-token': token }
         })
       ]);
-      
+
       setFiles(filesResponse.data);
       setSharedFiles(sharesResponse.data);
-      
+      setReceivedFiles(receivedResponse.data);
+
       // Calculate storage percentage
       const used = userResponse.data.storageUsed || 0;
       const total = userResponse.data.storageLimit || 1073741824;
       const percentUsed = Math.round((used / total) * 100);
-      
+
       setStorageInfo({
         used,
         total,
         percentUsed
       });
-      
+
       setLoading(false);
     } catch (err) {
       console.error('Error fetching user data:', err);
@@ -138,65 +144,65 @@ export default function Home() {
       setLoading(false);
     }
   };
-  
+
   const handleLogout = () => {
     // Use the context's logout function which properly clears all auth state
     logout();
-    
+
     // Force a page reload to reset all component states
     window.location.href = '/signin';
   };
-  
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
-  
+
   const handleUploadComplete = (fileData: any) => {
     // Update files list after successful upload
     setFiles(prevFiles => [fileData.file, ...prevFiles]);
-    
+
     // Refresh all data to get updated storage info
     fetchUserData();
-    
+
     // Show success notification
     setSnackbarMessage('File uploaded successfully');
     setSnackbarOpen(true);
   };
-  
+
   const handleShareClick = (file: any) => {
     setSelectedFile(file);
     setShareModalOpen(true);
   };
-  
+
   const handleShareComplete = () => {
     // Refresh shares after completion
     fetchUserData();
     setShareModalOpen(false);
   };
-  
+
   const handleDeleteClick = (file: any) => {
     setFileToDelete(file);
     setDeleteDialogOpen(true);
   };
-  
+
   const handleDeleteConfirm = async () => {
     if (!fileToDelete) return;
-    
+
     setDeletingFile(true);
-    
+
     try {
       const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
-      
+
       await axios.delete(`${API_BASE_URL}/files/${fileToDelete._id}`, {
         headers: { 'x-auth-token': token }
       });
-      
+
       // Remove file from state
       setFiles(prevFiles => prevFiles.filter(f => f._id !== fileToDelete._id));
-      
+
       // Update storage info
       fetchUserData();
-      
+
       // Show success notification
       setSnackbarMessage('File deleted successfully');
       setSnackbarOpen(true);
@@ -210,31 +216,31 @@ export default function Home() {
       setFileToDelete(null);
     }
   };
-  
+
   const handleRevokeClick = (share: any) => {
     setShareToRevoke(share);
     setRevokeDialogOpen(true);
   };
-  
+
   const handleRevokeConfirm = async () => {
     if (!shareToRevoke) return;
-    
+
     setRevokingShare(true);
-    
+
     try {
       const token = localStorage.getItem('authToken'); // Changed from 'token' to 'authToken'
-      
+
       await axios.delete(`${API_BASE_URL}/shares/${shareToRevoke._id}`, {
         headers: { 'x-auth-token': token }
       });
-      
+
       // Update share in state
-      setSharedFiles(prevShares => 
-        prevShares.map(s => 
+      setSharedFiles(prevShares =>
+        prevShares.map(s =>
           s._id === shareToRevoke._id ? { ...s, isRevoked: true } : s
         )
       );
-      
+
       // Show success notification
       setSnackbarMessage('Share revoked successfully');
       setSnackbarOpen(true);
@@ -248,19 +254,19 @@ export default function Home() {
       setShareToRevoke(null);
     }
   };
-  
+
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return '0 Bytes';
-    
+
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    
+
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
   };
-  
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString();
@@ -279,7 +285,7 @@ export default function Home() {
             </IconButton>
           </Toolbar>
         </AppBar>
-        
+
         <Box
           sx={{
             flex: 1,
@@ -290,27 +296,27 @@ export default function Home() {
           }}
         >
           {/* Storage Info */}
-          <Paper 
-            elevation={1} 
+          <Paper
+            elevation={1}
             sx={{ p: 2, mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
           >
             <Box>
               <Typography variant="body2" color="text.secondary">
                 Storage Used: {formatBytes(storageInfo.used)} of {formatBytes(storageInfo.total)} ({storageInfo.percentUsed}%)
               </Typography>
-              <Box 
-                sx={{ 
-                  height: 6, 
-                  width: '100%', 
-                  bgcolor: 'grey.200', 
-                  borderRadius: 3, 
+              <Box
+                sx={{
+                  height: 6,
+                  width: '100%',
+                  bgcolor: 'grey.200',
+                  borderRadius: 3,
                   mt: 1,
                   position: 'relative',
                   overflow: 'hidden'
                 }}
               >
-                <Box 
-                  sx={{ 
+                <Box
+                  sx={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
@@ -318,7 +324,7 @@ export default function Home() {
                     width: `${storageInfo.percentUsed}%`,
                     bgcolor: storageInfo.percentUsed > 90 ? 'error.main' : 'primary.main',
                     borderRadius: 3,
-                  }} 
+                  }}
                 />
               </Box>
             </Box>
@@ -331,24 +337,25 @@ export default function Home() {
               Upload Files
             </Button>
           </Paper>
-          
+
           {/* Error Message */}
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
-          
+
           {/* Tabs and Content */}
           <Box sx={{ width: '100%', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs value={tabValue} onChange={handleTabChange} aria-label="file management tabs">
+              <Tabs value={tabValue} onChange={handleTabChange} aria-label="file management tabs" variant="scrollable" scrollButtons="auto">
                 <Tab label="My Files" id="tab-0" aria-controls="tabpanel-0" />
                 <Tab label="Upload" id="tab-1" aria-controls="tabpanel-1" />
                 <Tab label="Shared Files" id="tab-2" aria-controls="tabpanel-2" />
+                <Tab label="Received Files" id="tab-3" aria-controls="tabpanel-3" icon={<InboxIcon />} iconPosition="start" />
               </Tabs>
             </Box>
-            
+
             <Box sx={{ flex: 1, overflow: 'auto' }}>
               <TabPanel value={tabValue} index={0}>
                 {loading ? (
@@ -369,8 +376,8 @@ export default function Home() {
                       </Box>
                       <Box component="tbody">
                         {files.map((file) => (
-                          <Box 
-                            component="tr" 
+                          <Box
+                            component="tr"
                             key={file._id || file.id}
                             sx={{ '&:hover': { bgcolor: 'action.hover' }, borderBottom: '1px solid', borderColor: 'divider' }}
                           >
@@ -396,18 +403,18 @@ export default function Home() {
                                           'x-auth-token': token
                                         }
                                       });
-                                      
+
                                       // Create a blob URL and trigger download
                                       const blob = new Blob([response.data]);
                                       const url = window.URL.createObjectURL(blob);
-                                      
+
                                       // Create and click a temporary download link
                                       const link = document.createElement('a');
                                       link.href = url;
                                       link.download = file.originalName;
                                       document.body.appendChild(link);
                                       link.click();
-                                      
+
                                       // Clean up
                                       setTimeout(() => {
                                         window.URL.revokeObjectURL(url);
@@ -448,8 +455,8 @@ export default function Home() {
                 ) : (
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 4 }}>
                     <Typography variant="h6" sx={{ mb: 2 }}>You don't have any files yet</Typography>
-                    <Button 
-                      variant="contained" 
+                    <Button
+                      variant="contained"
                       color="primary"
                       onClick={() => setTabValue(1)}
                       startIcon={<CloudUploadIcon />}
@@ -459,12 +466,12 @@ export default function Home() {
                   </Box>
                 )}
               </TabPanel>
-              
+
               <TabPanel value={tabValue} index={1}>
                 <Typography variant="h6" sx={{ mb: 3 }}>Upload Files</Typography>
                 <FileUpload onUploadComplete={handleUploadComplete} />
               </TabPanel>
-              
+
               <TabPanel value={tabValue} index={2}>
                 {loading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -485,8 +492,8 @@ export default function Home() {
                       </Box>
                       <Box component="tbody">
                         {sharedFiles.map((share) => (
-                          <Box 
-                            component="tr" 
+                          <Box
+                            component="tr"
                             key={share._id}
                             sx={{ '&:hover': { bgcolor: 'action.hover' }, borderBottom: '1px solid', borderColor: 'divider' }}
                           >
@@ -529,20 +536,129 @@ export default function Home() {
                   </Box>
                 )}
               </TabPanel>
+
+              <TabPanel value={tabValue} index={3}>
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : receivedFiles.length > 0 ? (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="h6" sx={{ mb: 2 }}>Files Shared With You</Typography>
+                    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <Box component="thead">
+                        <Box component="tr" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                          <Box component="th" sx={{ textAlign: 'left', p: 1.5 }}>File</Box>
+                          <Box component="th" sx={{ textAlign: 'left', p: 1.5 }}>From</Box>
+                          <Box component="th" sx={{ textAlign: 'left', p: 1.5 }}>Size</Box>
+                          <Box component="th" sx={{ textAlign: 'left', p: 1.5 }}>Permission</Box>
+                          <Box component="th" sx={{ textAlign: 'left', p: 1.5 }}>Expires</Box>
+                          <Box component="th" sx={{ textAlign: 'center', p: 1.5 }}>Actions</Box>
+                        </Box>
+                      </Box>
+                      <Box component="tbody">
+                        {receivedFiles.map((share: any) => (
+                          <Box
+                            component="tr"
+                            key={share._id}
+                            sx={{ '&:hover': { bgcolor: 'action.hover' }, borderBottom: '1px solid', borderColor: 'divider' }}
+                          >
+                            <Box component="td" sx={{ p: 1.5 }}>
+                              {share.file?.originalName || 'Unknown file'}
+                            </Box>
+                            <Box component="td" sx={{ p: 1.5 }}>
+                              {share.owner?.username || share.owner?.email || 'Unknown'}
+                            </Box>
+                            <Box component="td" sx={{ p: 1.5 }}>
+                              {share.file?.size ? formatBytes(share.file.size) : '—'}
+                            </Box>
+                            <Box component="td" sx={{ p: 1.5 }}>
+                              <Typography variant="body2"
+                                sx={{
+                                  color: share.permission === 'download' ? 'success.main' :
+                                    share.permission === 'edit' ? 'info.main' : 'text.secondary',
+                                  fontWeight: 'bold'
+                                }}
+                              >
+                                {share.permission === 'view' ? 'View Only' :
+                                  share.permission === 'download' ? 'Download' : 'Edit'}
+                              </Typography>
+                            </Box>
+                            <Box component="td" sx={{ p: 1.5 }}>
+                              {formatDate(share.expiresAt)}
+                            </Box>
+                            <Box component="td" sx={{ p: 1.5, textAlign: 'center' }}>
+                              {share.permission !== 'view' ? (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  startIcon={<CloudDownloadIcon />}
+                                  onClick={async () => {
+                                    try {
+                                      const token = localStorage.getItem('authToken');
+                                      if (token) {
+                                        const response = await axios({
+                                          url: `${API_BASE_URL}/shares/received/download/${share._id}`,
+                                          method: 'GET',
+                                          responseType: 'blob',
+                                          headers: { 'x-auth-token': token }
+                                        });
+                                        const blob = new Blob([response.data]);
+                                        const url = window.URL.createObjectURL(blob);
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.download = share.file?.originalName || 'download';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        setTimeout(() => {
+                                          window.URL.revokeObjectURL(url);
+                                          document.body.removeChild(link);
+                                        }, 100);
+                                      }
+                                    } catch (error) {
+                                      console.error('Download error:', error);
+                                      setSnackbarMessage('Failed to download file');
+                                      setSnackbarOpen(true);
+                                    }
+                                  }}
+                                >
+                                  Download
+                                </Button>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                  View only
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 4 }}>
+                    <InboxIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                    <Typography variant="h6" sx={{ mb: 2 }}>No files shared with you yet</Typography>
+                    <Typography variant="body1" color="text.secondary">
+                      When someone shares a file with your email, it will appear here.
+                    </Typography>
+                  </Box>
+                )}
+              </TabPanel>
             </Box>
           </Box>
         </Box>
       </Box>
-      
+
       {/* File Share Modal */}
       {selectedFile && (
-        <FileShareModal 
-          open={shareModalOpen} 
-          onClose={handleShareComplete} 
-          file={selectedFile} 
+        <FileShareModal
+          open={shareModalOpen}
+          onClose={handleShareComplete}
+          file={selectedFile}
         />
       )}
-      
+
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
@@ -558,9 +674,9 @@ export default function Home() {
           <Button onClick={() => setDeleteDialogOpen(false)} disabled={deletingFile}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleDeleteConfirm} 
-            color="error" 
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
             variant="contained"
             disabled={deletingFile}
             startIcon={deletingFile ? <CircularProgress size={16} /> : undefined}
@@ -569,7 +685,7 @@ export default function Home() {
           </Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Revoke Share Confirmation Dialog */}
       <Dialog
         open={revokeDialogOpen}
@@ -578,7 +694,7 @@ export default function Home() {
         <DialogTitle>Revoke Share</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to revoke access for {shareToRevoke?.recipientEmail}? 
+            Are you sure you want to revoke access for {shareToRevoke?.recipientEmail}?
             They will no longer be able to access this file.
           </DialogContentText>
         </DialogContent>
@@ -586,9 +702,9 @@ export default function Home() {
           <Button onClick={() => setRevokeDialogOpen(false)} disabled={revokingShare}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleRevokeConfirm} 
-            color="error" 
+          <Button
+            onClick={handleRevokeConfirm}
+            color="error"
             variant="contained"
             disabled={revokingShare}
             startIcon={revokingShare ? <CircularProgress size={16} /> : undefined}
@@ -597,7 +713,7 @@ export default function Home() {
           </Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Notification Snackbar */}
       <Snackbar
         open={snackbarOpen}

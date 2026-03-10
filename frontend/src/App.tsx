@@ -18,11 +18,11 @@ const LoadingScreen = () => (
 // Protected route component that redirects to login if not authenticated
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();
-  
+
   if (loading) {
     return <LoadingScreen />;
   }
-  
+
   return isAuthenticated ? <>{children}</> : <Navigate to="/signin" replace />;
 };
 
@@ -31,10 +31,10 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
   const [hasDelayed, setHasDelayed] = useState(false);
-  
+
   // Debug log for authentication state during routing
   console.log(`Auth route check for ${location.pathname}:`, { isAuthenticated, loading });
-  
+
   // Add a delay to avoid rapid redirects that can cause navigation throttling
   useEffect(() => {
     // Only start the delay timer if not loading
@@ -42,51 +42,42 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
       const timer = setTimeout(() => {
         setHasDelayed(true);
       }, 100);
-      
+
       return () => clearTimeout(timer);
     }
   }, [loading]);
-  
+
   // Show loading screen while auth is loading or waiting for delay
   if (loading || !hasDelayed) {
     return <LoadingScreen />;
   }
-  
+
   // Once loaded and delayed, either redirect to home or show children
   return isAuthenticated ? <Navigate to="/home" replace /> : <>{children}</>;
 };
 
 const App = () => {
-  const { loading } = useAuth();
-
-  if (loading) {
-    return (
-      <ThemeWrapper>
-        <LoadingScreen />
-      </ThemeWrapper>
-    );
-  }
-
+  // NOTE: We do NOT block on auth loading here so public routes (like /share) render immediately
   return (
     <ThemeWrapper>
       <Router>
         <Routes>
           {/* Default route */}
           <Route path="/" element={<Navigate to="/signin" replace />} />
-          
+
           {/* Auth routes (for non-authenticated users) */}
           <Route path="/signin" element={<AuthRoute><Login /></AuthRoute>} />
           <Route path="/signup" element={<AuthRoute><SignUp /></AuthRoute>} />
-          
+
           {/* Special case - OTP verification can be accessed by anyone */}
           <Route path="/verify-otp" element={<OtpVerification />} />
-          
+
           {/* Protected routes (for authenticated users only) */}
           <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-          
-          {/* Public routes */}
+
+          {/* PUBLIC route - renders immediately, does NOT wait for auth check */}
           <Route path="/share/:shareId" element={<SharedFileAccess />} />
-          
+
           {/* Fallback route */}
           <Route path="*" element={<Navigate to="/signin" replace />} />
         </Routes>
